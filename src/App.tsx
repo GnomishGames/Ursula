@@ -9,7 +9,7 @@ export default function App() {
     loadData();
   }, []);
 
-  const canExecute = !!(selectedInventory && selectedPlaybook && status === "idle");
+  const canExecute = !!(selectedInventory && selectedPlaybook && status !== "running");
 
   return (
     <div className="app-root">
