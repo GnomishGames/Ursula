@@ -43,10 +43,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectPlaybook: (pb) => set({ selectedPlaybook: pb }),
 
   execute: async () => {
-    const { selectedInventory, selectedPlaybook } = get();
+    const { selectedInventory, selectedPlaybook, clearOutput } = get();
     if (!selectedInventory || !selectedPlaybook) return;
 
-    set({ status: "running", output: [] });
+    clearOutput();
+    set({ status: "running" });
 
     try {
       const unlisten = await listen<OutputLine>("ansible-output", (event) => {

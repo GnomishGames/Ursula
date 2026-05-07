@@ -3,13 +3,13 @@ import { useAppStore } from "./store/appStore";
 import "./styles.css";
 
 export default function App() {
-  const { loadData, inventories, playbooks, selectedInventory, selectedPlaybook, status, output, selectInventory, selectPlaybook, execute, clearOutput } = useAppStore();
+  const { loadData, inventories, playbooks, selectedInventory, selectedPlaybook, status, output, selectInventory, selectPlaybook, execute } = useAppStore();
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const canExecute = selectedInventory && selectedPlaybook && status === "idle";
+  const canExecute = !!(selectedInventory && selectedPlaybook && status === "idle");
 
   return (
     <div className="app-root">
@@ -35,7 +35,6 @@ export default function App() {
           output={output}
           canExecute={canExecute}
           onExecute={execute}
-          onClear={clearOutput}
         />
       </div>
     </div>
@@ -94,14 +93,13 @@ function SidebarPanel({ title, items, selectedItem, onSelect }: {
   );
 }
 
-function Terminal({ selectedInventory, selectedPlaybook, status, output, canExecute, onExecute, onClear }: {
+function Terminal({ selectedInventory, selectedPlaybook, status, output, canExecute, onExecute }: {
   selectedInventory: any;
   selectedPlaybook: any;
   status: string;
   output: any[];
   canExecute: boolean;
   onExecute: () => void;
-  onClear: () => void;
 }) {
   const terminalRef = useRef<HTMLDivElement>(null);
   
@@ -143,9 +141,6 @@ function Terminal({ selectedInventory, selectedPlaybook, status, output, canExec
           <button className="execute-btn" disabled={!canExecute} onClick={onExecute}>
             <PlayIcon />
             Run
-          </button>
-          <button className="icon-btn" onClick={onClear}>
-            <ClearIcon />
           </button>
         </div>
       </div>
@@ -204,15 +199,6 @@ function PlayIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
       <polygon points="5,3 19,12 5,21" />
-    </svg>
-  );
-}
-
-function ClearIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
   );
 }
