@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAppStore } from "./store/appStore";
 import "./styles.css";
 
@@ -28,7 +28,7 @@ export default function App() {
         />
       </div>
       <div className="main-area">
-        <ContentArea
+        <Terminal
           selectedInventory={selectedInventory}
           selectedPlaybook={selectedPlaybook}
           status={status}
@@ -94,7 +94,7 @@ function SidebarPanel({ title, items, selectedItem, onSelect }: {
   );
 }
 
-function ContentArea({ selectedInventory, selectedPlaybook, status, output, canExecute, onExecute, onClear }: {
+function Terminal({ selectedInventory, selectedPlaybook, status, output, canExecute, onExecute, onClear }: {
   selectedInventory: any;
   selectedPlaybook: any;
   status: string;
@@ -103,11 +103,19 @@ function ContentArea({ selectedInventory, selectedPlaybook, status, output, canE
   onExecute: () => void;
   onClear: () => void;
 }) {
+  const terminalRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [output]);
+
   const isWaiting = !selectedInventory && !selectedPlaybook;
 
   if (isWaiting) {
     return (
-      <div className="content-area">
+      <div className="terminal-waiting">
         <div className="empty-state">
           <div className="empty-state-inner">
             <div className="empty-logo">
@@ -123,63 +131,40 @@ function ContentArea({ selectedInventory, selectedPlaybook, status, output, canE
   }
 
   return (
-    <div className="content-area">
-      <div className="selection-panel">
-        <div className="selection-row">
-          <span className="selection-label">Inventory</span>
-          <div className="selection-display">
-            <span className="selection-display-label">
-              {selectedInventory?.name || "—"}
-            </span>
-          </div>
+    <div className="terminal">
+      <div className="terminal-header">
+        <div className="terminal-title">
+          <span className="terminal-status-dot terminal-status-dot--{status}"></span>
+          <span className="terminal-status-text">
+            {status === "running" ? "Running..." : status === "success" ? "Completed" : status === "failed" ? "Failed" : "Ready"}
+          </span>
         </div>
-        <div className="selection-row">
-          <span className="selection-label">Playbook</span>
-          <div className="selection-display">
-            <span className="selection-display-label">
-              {selectedPlaybook?.name || "—"}
-            </span>
-          </div>
+        <div className="terminal-actions">
+          <button className="execute-btn" disabled={!canExecute} onClick={onExecute}>
+            <PlayIcon />
+            Run
+          </button>
+          <button className="icon-btn" onClick={onClear}>
+            <ClearIcon />
+          </button>
         </div>
       </div>
-
-      <div className="execute-section">
-        <button
-          className="execute-btn"
-          disabled={!canExecute}
-          onClick={onExecute}
-        >
-          {status === "running" ? (
-            <>
-              <span className="spinner"></span>
-              Running...
-            </>
-          ) : (
-            <>
-              <PlayIcon />
-              Run Playbook
-            </>
-          )}
-        </button>
+      <div className="terminal-toolbar">
+        <span className="terminal-command">
+          ansible-playbook -i {selectedInventory?.name} {selectedPlaybook?.name}
+        </span>
       </div>
-
-      {output.length > 0 && (
-        <div className="output-panel">
-          <div className="output-header">
-            <span className="output-title">Output</span>
-            <button className="icon-btn" onClick={onClear}>
-              <ClearIcon />
-            </button>
-          </div>
-          <div className="output-content">
-            {output.map((line, i) => (
-              <div key={i} className={`output-line output-line--${line.type}`}>
-                {line.line}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="terminal-content" ref={terminalRef}>
+        {output.length === 0 ? (
+          <div className="terminal-empty">Press Run to execute the playbook</div>
+        ) : (
+          output.map((line, i) => (
+            <div key={i} className={`terminal-line terminal-line--${line.stream}`}>
+              {line.line}
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

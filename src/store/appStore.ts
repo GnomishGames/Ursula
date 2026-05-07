@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
-import { Inventory, Playbook, ExecutionStatus, ExecutionOutput } from "../types";
+import { listen } from "@tauri-apps/api/event";
+import { Inventory, Playbook, ExecutionStatus, OutputLine } from "../types";
 
 interface AppState {
   inventories: Inventory[];
@@ -8,7 +9,7 @@ interface AppState {
   selectedInventory: Inventory | null;
   selectedPlaybook: Playbook | null;
   status: ExecutionStatus;
-  output: ExecutionOutput[];
+  output: OutputLine[];
 
   loadData: () => Promise<void>;
   selectInventory: (inv: Inventory | null) => void;
@@ -48,31 +49,26 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ status: "running", output: [] });
 
     try {
-      const result = await invoke<{ success: boolean; stdout: string; stderr: string }>("run_playbook", {
+      const unlisten = await listen<OutputLine>("ansible-output", (event) => {
+        set((state) => ({
+          output: [...state.output, event.payload],
+        }));
+      });
+
+      const unlistenComplete = await listen<boolean>("ansible-complete", (event) => {
+        set({ status: event.payload ? "success" : "failed" });
+      });
+
+      await invoke("run_playbook", {
         inventory: selectedInventory.path,
         playbook: selectedPlaybook.path,
       });
 
-      const output: ExecutionOutput[] = [];
-      
-      if (result.stdout) {
-        result.stdout.split("\n").forEach((line) => {
-          if (line) output.push({ line, type: "stdout" });
-        });
-      }
-      if (result.stderr) {
-        result.stderr.split("\n").forEach((line) => {
-          if (line) output.push({ line, type: "stderr" });
-        });
-      }
-
-      set({
-        output: output.length > 0 ? output : [{ line: result.success ? "Done" : "Failed", type: result.success ? "info" : "stderr" }],
-        status: result.success ? "success" : "failed",
-      });
+      unlisten();
+      unlistenComplete();
     } catch (err) {
       set({
-        output: [{ line: String(err), type: "stderr" }],
+        output: [{ line: String(err), stream: "stderr" }],
         status: "failed",
       });
     }

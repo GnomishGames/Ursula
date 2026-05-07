@@ -445,3 +445,117 @@ html, body, #root {
   font-size: 12px;
   color: var(--text-muted);
 }
+
+/* ── Terminal ───────────────────────────────────────── */
+.terminal {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-base);
+  overflow: hidden;
+}
+
+.terminal-waiting {
+  flex: 1;
+  display: flex;
+}
+
+.terminal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.terminal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.terminal-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.terminal-status-dot--idle { background: var(--text-muted); }
+.terminal-status-dot--running { background: var(--yellow); animation: pulse 1.2s infinite; }
+.terminal-status-dot--success { background: var(--green); }
+.terminal-status-dot--failed { background: var(--red); }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.terminal-status-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.terminal-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.terminal-actions .execute-btn {
+  width: auto;
+  padding: 6px 12px;
+  background: var(--green);
+  color: #0d1117;
+}
+
+.terminal-actions .execute-btn:hover { background: #5fd068; }
+.terminal-actions .execute-btn:disabled {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+}
+
+.terminal-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.terminal-command {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.terminal-content {
+  flex: 1;
+  padding: 12px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  background: #0a0e14;
+}
+
+.terminal-content::-webkit-scrollbar { width: 6px; }
+.terminal-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.terminal-empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.terminal-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.terminal-line--stdout { color: var(--text-primary); }
+.terminal-line--stderr { color: #ff6b6b; }
+.terminal-line--success { color: var(--green); }
+.terminal-line--error { color: var(--red); }

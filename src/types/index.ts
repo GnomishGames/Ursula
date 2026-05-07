@@ -12,7 +12,7 @@ export interface Playbook {
 
 export type ExecutionStatus = "idle" | "running" | "success" | "failed";
 
-export interface ExecutionOutput {
+export interface OutputLine {
   line: string;
-  type: "stdout" | "stderr" | "info";
+  stream: "stdout" | "stderr" | "success" | "error";
 }

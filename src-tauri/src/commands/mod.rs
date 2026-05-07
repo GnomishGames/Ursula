@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::process::Command;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tauri::Emitter;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Inventory {
@@ -65,30 +67,62 @@ pub async fn list_playbooks() -> Result<Vec<Playbook>, String> {
     }).collect())
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ExecutionResult {
-    pub success: bool,
-    pub stdout: String,
-    pub stderr: String,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutputLine {
+    pub line: String,
+    pub stream: String,
 }
 
 #[tauri::command]
-pub async fn run_playbook(inventory: String, playbook: String) -> Result<ExecutionResult, String> {
+pub async fn run_playbook(app: tauri::AppHandle, inventory: String, playbook: String) -> Result<(), String> {
     let ansible_dir = get_ansible_dir();
     
     let mut cmd = Command::new("ansible-playbook");
     cmd.arg("-i").arg(&inventory).arg(&playbook);
     cmd.current_dir(&ansible_dir);
     
-    let output = cmd.output().await.map_err(|e| e.to_string())?;
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
     
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    let success = output.status.success();
+    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
     
-    Ok(ExecutionResult {
-        success,
-        stdout,
-        stderr,
-    })
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+    
+    let mut stdout_reader = BufReader::new(stdout).lines();
+    let mut stderr_reader = BufReader::new(stderr).lines();
+    
+    let app_stdout = app.clone();
+    let app_stderr = app.clone();
+    
+    let stdout_handle = tokio::spawn(async move {
+        while let Ok(Some(line)) = stdout_reader.next_line().await {
+            let _ = app_stdout.emit("ansible-output", OutputLine {
+                line,
+                stream: "stdout".to_string(),
+            });
+        }
+    });
+    
+    let stderr_handle = tokio::spawn(async move {
+        while let Ok(Some(line)) = stderr_reader.next_line().await {
+            let _ = app_stderr.emit("ansible-output", OutputLine {
+                line,
+                stream: "stderr".to_string(),
+            });
+        }
+    });
+    
+    let _ = tokio::join!(stdout_handle, stderr_handle);
+    
+    let status = child.wait().await.map_err(|e| e.to_string())?;
+    
+    let _ = app.emit("ansible-output", OutputLine {
+        line: format!("\nProcess exited with code {}", status.code().unwrap_or(-1)),
+        stream: if status.success() { "success" } else { "error" }.to_string(),
+    });
+    
+    let _ = app.emit("ansible-complete", status.success());
+    
+    Ok(())
 }
