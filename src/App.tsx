@@ -111,20 +111,48 @@ function Terminal({ groups, limit, status, output, canExecute, onLimitChange, on
     }
   }, [output]);
 
-  const isWaiting = output.length === 0 && status === "idle";
+  const hasSelection = output.length > 0 || status !== "idle";
 
-  if (isWaiting) {
+  if (!hasSelection) {
     return (
-      <div className="terminal-waiting">
-        <div className="empty-state">
-          <div className="empty-state-inner">
-            <div className="empty-logo">
-              <span className="logo-bracket">[</span>
-              <span className="logo-text">Ursula</span>
-              <span className="logo-bracket">]</span>
-            </div>
-            <p className="empty-hint">Select an inventory and playbook to get started</p>
+      <div className="terminal">
+        <div className="terminal-header">
+          <div className="terminal-title">
+            <span className="terminal-status-dot terminal-status-dot--idle"></span>
+            <span className="terminal-status-text">Ready</span>
           </div>
+          <div className="terminal-actions">
+            <button className="execute-btn" disabled={!canExecute} onClick={onExecute}>
+              <PlayIcon />
+              Run
+            </button>
+          </div>
+        </div>
+        <div className="terminal-toolbar">
+          <div className="limit-input-row">
+            <input
+              type="text"
+              className="limit-input"
+              placeholder="--limit (host or group)"
+              value={limit}
+              onChange={(e) => onLimitChange(e.target.value)}
+            />
+            {groups.length > 0 && (
+              <select 
+                className="limit-select"
+                value={limit}
+                onChange={(e) => onLimitChange(e.target.value)}
+              >
+                <option value="">Select group...</option>
+                {groups.map(g => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
+        <div className="terminal-content">
+          <div className="terminal-empty">Select an inventory and playbook to get started</div>
         </div>
       </div>
     );
