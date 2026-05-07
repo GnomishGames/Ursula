@@ -67,6 +67,45 @@ pub async fn list_playbooks() -> Result<Vec<Playbook>, String> {
     }).collect())
 }
 
+#[tauri::command]
+pub async fn list_groups(inventory: String) -> Result<Vec<String>, String> {
+    let ansible_dir = get_ansible_dir();
+    
+    let mut cmd = Command::new("ansible-inventory");
+    cmd.arg("-i").arg(&inventory).arg("--list");
+    cmd.current_dir(&ansible_dir);
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+    
+    let output = cmd.output().await.map_err(|e| e.to_string())?;
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    
+    let groups = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+        let mut result = Vec::new();
+        if let Some(meta) = json.get("_meta") {
+            if let Some(hosts) = meta.as_object() {
+                for h in hosts.keys() {
+                    result.push(h.clone());
+                }
+            }
+        }
+        if let Some(obj) = json.as_object() {
+            for (k, _) in obj {
+                if !k.starts_with('_') {
+                    result.push(k.clone());
+                }
+            }
+        }
+        result.sort();
+        result.dedup();
+        result
+    } else {
+        Vec::new()
+    };
+    
+    Ok(groups)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputLine {
     pub line: String,
@@ -74,11 +113,16 @@ pub struct OutputLine {
 }
 
 #[tauri::command]
-pub async fn run_playbook(app: tauri::AppHandle, inventory: String, playbook: String) -> Result<(), String> {
+pub async fn run_playbook(app: tauri::AppHandle, inventory: String, playbook: String, limit: Option<String>) -> Result<(), String> {
     let ansible_dir = get_ansible_dir();
     
     let mut cmd = Command::new("ansible-playbook");
     cmd.arg("-i").arg(&inventory).arg(&playbook);
+    if let Some(lim) = &limit {
+        if !lim.is_empty() {
+            cmd.arg("--limit").arg(lim);
+        }
+    }
     cmd.current_dir(&ansible_dir);
     
     cmd.stdout(std::process::Stdio::piped());

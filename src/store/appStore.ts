@@ -6,14 +6,17 @@ import { Inventory, Playbook, ExecutionStatus, OutputLine } from "../types";
 interface AppState {
   inventories: Inventory[];
   playbooks: Playbook[];
+  groups: string[];
   selectedInventory: Inventory | null;
   selectedPlaybook: Playbook | null;
+  limit: string;
   status: ExecutionStatus;
   output: OutputLine[];
 
   loadData: () => Promise<void>;
   selectInventory: (inv: Inventory | null) => void;
   selectPlaybook: (pb: Playbook | null) => void;
+  setLimit: (limit: string) => void;
   execute: () => Promise<void>;
   clearOutput: () => void;
 }
@@ -21,8 +24,10 @@ interface AppState {
 export const useAppStore = create<AppState>((set, get) => ({
   inventories: [],
   playbooks: [],
+  groups: [],
   selectedInventory: null,
   selectedPlaybook: null,
+  limit: "",
   status: "idle",
   output: [],
 
@@ -38,12 +43,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  selectInventory: (inv) => set({ selectedInventory: inv }),
+  selectInventory: async (inv) => {
+    set({ selectedInventory: inv, groups: [], limit: "" });
+    if (inv) {
+      try {
+        const groups = await invoke<string[]>("list_groups", { inventory: inv.path });
+        set({ groups });
+      } catch {
+        set({ groups: [] });
+      }
+    }
+  },
 
   selectPlaybook: (pb) => set({ selectedPlaybook: pb }),
 
+  setLimit: (limit) => set({ limit }),
+
   execute: async () => {
-    const { selectedInventory, selectedPlaybook, clearOutput } = get();
+    const { selectedInventory, selectedPlaybook, limit, clearOutput } = get();
     if (!selectedInventory || !selectedPlaybook) return;
 
     clearOutput();
@@ -57,12 +74,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
 
       const unlistenComplete = await listen<boolean>("ansible-complete", (event) => {
-        set({ status: event.payload ? "success" : "failed" });
+        set({ status: event ? "success" : "failed" });
       });
 
       await invoke("run_playbook", {
         inventory: selectedInventory.path,
         playbook: selectedPlaybook.path,
+        limit: limit || null,
       });
 
       unlisten();

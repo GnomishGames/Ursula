@@ -3,7 +3,7 @@ import { useAppStore } from "./store/appStore";
 import "./styles.css";
 
 export default function App() {
-  const { loadData, inventories, playbooks, selectedInventory, selectedPlaybook, status, output, selectInventory, selectPlaybook, execute } = useAppStore();
+  const { loadData, inventories, playbooks, groups, selectedInventory, selectedPlaybook, limit, status, output, selectInventory, selectPlaybook, setLimit, execute } = useAppStore();
 
   useEffect(() => {
     loadData();
@@ -29,11 +29,12 @@ export default function App() {
       </div>
       <div className="main-area">
         <Terminal
-          selectedInventory={selectedInventory}
-          selectedPlaybook={selectedPlaybook}
+          groups={groups}
+          limit={limit}
           status={status}
           output={output}
           canExecute={canExecute}
+          onLimitChange={setLimit}
           onExecute={execute}
         />
       </div>
@@ -93,12 +94,13 @@ function SidebarPanel({ title, items, selectedItem, onSelect }: {
   );
 }
 
-function Terminal({ selectedInventory, selectedPlaybook, status, output, canExecute, onExecute }: {
-  selectedInventory: any;
-  selectedPlaybook: any;
+function Terminal({ groups, limit, status, output, canExecute, onLimitChange, onExecute }: {
+  groups: string[];
+  limit: string;
   status: string;
   output: any[];
   canExecute: boolean;
+  onLimitChange: (limit: string) => void;
   onExecute: () => void;
 }) {
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -109,7 +111,7 @@ function Terminal({ selectedInventory, selectedPlaybook, status, output, canExec
     }
   }, [output]);
 
-  const isWaiting = !selectedInventory && !selectedPlaybook;
+  const isWaiting = output.length === 0 && status === "idle";
 
   if (isWaiting) {
     return (
@@ -132,7 +134,7 @@ function Terminal({ selectedInventory, selectedPlaybook, status, output, canExec
     <div className="terminal">
       <div className="terminal-header">
         <div className="terminal-title">
-          <span className="terminal-status-dot terminal-status-dot--{status}"></span>
+          <span className={`terminal-status-dot terminal-status-dot--${status}`}></span>
           <span className="terminal-status-text">
             {status === "running" ? "Running..." : status === "success" ? "Completed" : status === "failed" ? "Failed" : "Ready"}
           </span>
@@ -145,20 +147,34 @@ function Terminal({ selectedInventory, selectedPlaybook, status, output, canExec
         </div>
       </div>
       <div className="terminal-toolbar">
-        <span className="terminal-command">
-          ansible-playbook -i {selectedInventory?.name} {selectedPlaybook?.name}
-        </span>
+        <div className="limit-input-row">
+          <input
+            type="text"
+            className="limit-input"
+            placeholder="--limit (host or group)"
+            value={limit}
+            onChange={(e) => onLimitChange(e.target.value)}
+          />
+          {groups.length > 0 && (
+            <select 
+              className="limit-select"
+              value={limit}
+              onChange={(e) => onLimitChange(e.target.value)}
+            >
+              <option value="">Select group...</option>
+              {groups.map(g => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
       <div className="terminal-content" ref={terminalRef}>
-        {output.length === 0 ? (
-          <div className="terminal-empty">Press Run to execute the playbook</div>
-        ) : (
-          output.map((line, i) => (
-            <div key={i} className={`terminal-line terminal-line--${line.stream}`}>
-              {line.line}
-            </div>
-          ))
-        )}
+        {output.map((line, i) => (
+          <div key={i} className={`terminal-line terminal-line--${line.stream}`}>
+            {line.line}
+          </div>
+        ))}
       </div>
     </div>
   );

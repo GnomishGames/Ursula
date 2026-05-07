@@ -524,6 +524,49 @@ html, body, #root {
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  gap: 8px;
+}
+
+.limit-input-row {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+
+.limit-input {
+  flex: 1;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  outline: none;
+}
+
+.limit-input:focus {
+  border-color: var(--accent);
+}
+
+.limit-input::placeholder {
+  color: var(--text-muted);
+}
+
+.limit-select {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  outline: none;
+  min-width: 140px;
+}
+
+.limit-select:focus {
+  border-color: var(--accent);
 }
 
 .terminal-command {
