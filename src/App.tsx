@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAppStore } from "./store/appStore";
 import "./styles.css";
 
@@ -13,14 +13,20 @@ export default function App() {
 
   return (
     <div className="app-root">
-      <Sidebar
-        inventories={inventories}
-        playbooks={playbooks}
-        selectedInventory={selectedInventory}
-        selectedPlaybook={selectedPlaybook}
-        onSelectInventory={selectInventory}
-        onSelectPlaybook={selectPlaybook}
-      />
+      <div className="sidebar">
+        <SidebarPanel
+          title="Inventories"
+          items={inventories}
+          selectedItem={selectedInventory}
+          onSelect={selectInventory}
+        />
+        <SidebarPanel
+          title="Playbooks"
+          items={playbooks}
+          selectedItem={selectedPlaybook}
+          onSelect={selectPlaybook}
+        />
+      </div>
       <div className="main-area">
         <ContentArea
           selectedInventory={selectedInventory}
@@ -36,70 +42,53 @@ export default function App() {
   );
 }
 
-function Sidebar({ inventories, playbooks, selectedInventory, selectedPlaybook, onSelectInventory, onSelectPlaybook }: {
-  inventories: any[];
-  playbooks: any[];
-  selectedInventory: any;
-  selectedPlaybook: any;
-  onSelectInventory: (inv: any) => void;
-  onSelectPlaybook: (pb: any) => void;
+function SidebarPanel({ title, items, selectedItem, onSelect }: {
+  title: string;
+  items: any[];
+  selectedItem: any;
+  onSelect: (item: any) => void;
 }) {
+  const [search, setSearch] = useState("");
+  
+  const filtered = items.filter(item => 
+    item.name.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
-    <div className="sidebar">
+    <div className="sidebar-panel">
       <div className="sidebar-header">
-        <span className="app-title">Ursula</span>
+        <span className="app-title">{title}</span>
+        <span className="list-section-count">{items.length}</span>
+      </div>
+      <div className="search-bar">
+        <SearchIcon />
+        <input
+          type="text"
+          className="search-input"
+          placeholder="Search..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
       </div>
       <div className="item-list">
-        <div className="list-section">
-          <button className="list-section-title">
-            Inventories
-            <span className="list-section-count">{inventories.length}</span>
-          </button>
-          {inventories.length === 0 ? (
-            <div className="empty-list">No inventories found</div>
-          ) : (
-            inventories.map((inv) => (
-              <button
-                key={inv.id}
-                className={`item-btn ${selectedInventory?.id === inv.id ? "item-btn--selected" : ""}`}
-                onClick={() => onSelectInventory(inv)}
-              >
-                <div className={`item-icon ${selectedInventory?.id === inv.id ? "item-icon--selected" : ""}`}>
-                  <ServerIcon />
-                </div>
-                <div className="item-info">
-                  <span className="item-label">{inv.name}</span>
-                  <span className="item-sublabel">{inv.path}</span>
-                </div>
-              </button>
-            ))
-          )}
-        </div>
-        <div className="list-section">
-          <button className="list-section-title">
-            Playbooks
-            <span className="list-section-count">{playbooks.length}</span>
-          </button>
-          {playbooks.length === 0 ? (
-            <div className="empty-list">No playbooks found</div>
-          ) : (
-            playbooks.map((pb) => (
-              <button
-                key={pb.id}
-                className={`item-btn ${selectedPlaybook?.id === pb.id ? "item-btn--selected" : ""}`}
-                onClick={() => onSelectPlaybook(pb)}
-              >
-                <div className={`item-icon ${selectedPlaybook?.id === pb.id ? "item-icon--selected" : ""}`}>
-                  <PlaybookIcon />
-                </div>
-                <div className="item-info">
-                  <span className="item-label">{pb.name}</span>
-                  <span className="item-sublabel">{pb.path}</span>
-                </div>
-              </button>
-            ))
-          )}
-        </div>
+        {filtered.length === 0 ? (
+          <div className="empty-list">No {title.toLowerCase()} found</div>
+        ) : (
+          filtered.map((item) => (
+            <button
+              key={item.id}
+              className={`item-btn ${selectedItem?.id === item.id ? "item-btn--selected" : ""}`}
+              onClick={() => onSelect(item)}
+            >
+              <div className={`item-icon ${selectedItem?.id === item.id ? "item-icon--selected" : ""}`}>
+                {title === "Inventories" ? <ServerIcon /> : <PlaybookIcon />}
+              </div>
+              <div className="item-info">
+                <span className="item-label">{item.name}</span>
+              </div>
+            </button>
+          ))
+        )}
       </div>
     </div>
   );
@@ -192,6 +181,15 @@ function ContentArea({ selectedInventory, selectedPlaybook, status, output, canE
         </div>
       )}
     </div>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg className="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
   );
 }
 
