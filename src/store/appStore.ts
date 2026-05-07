@@ -20,6 +20,7 @@ interface AppState {
   setLimit: (limit: string) => void;
   loadLayer2: (group: string) => Promise<void>;
   execute: () => Promise<void>;
+  kill: () => Promise<void>;
   clearOutput: () => void;
 }
 
@@ -108,6 +109,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         status: "failed",
       });
     }
+  },
+
+  kill: async () => {
+    try {
+      await invoke("kill_playbook");
+      set({ status: "failed", output: [...get().output, { line: "\nProcess killed", stream: "stderr" }] });
+    } catch {}
   },
 
   clearOutput: () => set({ output: [], status: "idle" }),

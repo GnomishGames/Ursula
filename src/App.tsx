@@ -3,7 +3,7 @@ import { useAppStore } from "./store/appStore";
 import "./styles.css";
 
 export default function App() {
-  const { loadData, inventories, playbooks, groups, layer2, selectedInventory, selectedPlaybook, limit, status, output, selectInventory, selectPlaybook, setLimit, loadLayer2, execute } = useAppStore();
+  const { loadData, inventories, playbooks, groups, layer2, selectedInventory, selectedPlaybook, limit, status, output, selectInventory, selectPlaybook, setLimit, loadLayer2, execute, kill } = useAppStore();
 
   useEffect(() => {
     loadData();
@@ -40,6 +40,7 @@ export default function App() {
           onLimitChange={setLimit}
           onGroupChange={loadLayer2}
           onExecute={execute}
+          onKill={kill}
         />
       </div>
     </div>
@@ -98,7 +99,7 @@ function SidebarPanel({ title, items, selectedItem, onSelect }: {
   );
 }
 
-function Terminal({ selectedInventory, selectedPlaybook, groups, layer2, limit, status, output, canExecute, onLimitChange, onGroupChange, onExecute }: {
+function Terminal({ selectedInventory, selectedPlaybook, groups, layer2, limit, status, output, canExecute, onLimitChange, onGroupChange, onExecute, onKill }: {
   selectedInventory: any;
   selectedPlaybook: any;
   groups: string[];
@@ -110,6 +111,7 @@ function Terminal({ selectedInventory, selectedPlaybook, groups, layer2, limit, 
   onLimitChange: (limit: string) => void;
   onGroupChange: (group: string) => void;
   onExecute: () => void;
+  onKill: () => void;
 }) {
   const terminalRef = useRef<HTMLDivElement>(null);
   
@@ -192,10 +194,17 @@ function Terminal({ selectedInventory, selectedPlaybook, groups, layer2, limit, 
           </span>
         </div>
         <div className="terminal-actions">
-          <button className="execute-btn" disabled={!canExecute} onClick={onExecute}>
-            <PlayIcon />
-            Run
-          </button>
+          {status === "running" ? (
+            <button className="execute-btn" onClick={onKill} style={{ background: 'var(--red)' }}>
+              <StopIcon />
+              Stop
+            </button>
+          ) : (
+            <button className="execute-btn" disabled={!canExecute} onClick={onExecute}>
+              <PlayIcon />
+              Run
+            </button>
+          )}
         </div>
       </div>
       <div className="terminal-toolbar">
@@ -279,6 +288,14 @@ function PlayIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
       <polygon points="5,3 19,12 5,21" />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="6" y="6" width="12" height="12" />
     </svg>
   );
 }

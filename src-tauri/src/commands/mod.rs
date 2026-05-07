@@ -192,9 +192,36 @@ pub struct OutputLine {
     pub stream: String,
 }
 
+lazy_static::lazy_static! {
+    static ref RUNNING_CHILD: std::sync::Mutex<Option<u32>> = std::sync::Mutex::new(None);
+}
+
+fn set_running_pid(pid: Option<u32>) {
+    if let Ok(mut lock) = RUNNING_CHILD.lock() {
+        *lock = pid;
+    }
+}
+
+fn get_running_pid() -> Option<u32> {
+    RUNNING_CHILD.lock().ok().and_then(|lock| *lock)
+}
+
+fn clear_running_pid() {
+    if let Ok(mut lock) = RUNNING_CHILD.lock() {
+        *lock = None;
+    }
+}
+
 #[tauri::command]
 pub async fn run_playbook(app: tauri::AppHandle, inventory: String, playbook: String, limit: Option<String>) -> Result<(), String> {
     let ansible_dir = get_ansible_dir();
+    
+    // Kill any existing process first
+    if let Some(pid) = get_running_pid() {
+        if std::process::Command::new("kill").arg("-15").arg(pid.to_string()).spawn().is_ok() {
+            let _ = std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+    }
     
     let mut cmd = Command::new("ansible-playbook");
     cmd.arg("-i").arg(&inventory).arg(&playbook);
@@ -209,6 +236,10 @@ pub async fn run_playbook(app: tauri::AppHandle, inventory: String, playbook: St
     cmd.stderr(std::process::Stdio::piped());
     
     let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+    if let Some(pid) = child.id() {
+        eprintln!("Started ansible-playbook with PID: {}", pid);
+        set_running_pid(Some(pid));
+    }
     
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
@@ -240,6 +271,7 @@ pub async fn run_playbook(app: tauri::AppHandle, inventory: String, playbook: St
     let _ = tokio::join!(stdout_handle, stderr_handle);
     
     let status = child.wait().await.map_err(|e| e.to_string())?;
+    clear_running_pid();
     
     let _ = app.emit("ansible-output", OutputLine {
         line: format!("\nProcess exited with code {}", status.code().unwrap_or(-1)),
@@ -248,5 +280,20 @@ pub async fn run_playbook(app: tauri::AppHandle, inventory: String, playbook: St
     
     let _ = app.emit("ansible-complete", status.success());
     
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn kill_playbook() -> Result<(), String> {
+    if let Some(pid) = get_running_pid() {
+        eprintln!("Killing PID: {}", pid);
+        let _ = std::process::Command::new("kill")
+            .arg("-15")
+            .arg(pid.to_string())
+            .output();
+        clear_running_pid();
+    } else {
+        eprintln!("No PID to kill");
+    }
     Ok(())
 }
