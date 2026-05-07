@@ -533,6 +533,19 @@ html, body, #root {
   flex: 1;
 }
 
+.limit-input-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.limit-input-group {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 6px;
+}
+
 .limit-input {
   flex: 1;
   background: var(--bg-base);

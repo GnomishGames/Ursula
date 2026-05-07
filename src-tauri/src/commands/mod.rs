@@ -68,6 +68,7 @@ pub async fn list_playbooks() -> Result<Vec<Playbook>, String> {
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn list_groups(inventory: String) -> Result<Vec<String>, String> {
     let ansible_dir = get_ansible_dir();
     
@@ -91,7 +92,7 @@ pub async fn list_groups(inventory: String) -> Result<Vec<String>, String> {
         }
         if let Some(obj) = json.as_object() {
             for (k, _) in obj {
-                if !k.starts_with('_') {
+                if !k.starts_with('_') && k != "hostvars" && k != "profile" {
                     result.push(k.clone());
                 }
             }
@@ -104,6 +105,85 @@ pub async fn list_groups(inventory: String) -> Result<Vec<String>, String> {
     };
     
     Ok(groups)
+}
+
+#[tauri::command]
+pub async fn list_all_children(inventory: String) -> Result<Vec<String>, String> {
+    let ansible_dir = get_ansible_dir();
+    
+    let mut cmd = Command::new("ansible-inventory");
+    cmd.arg("-i").arg(&inventory).arg("--list");
+    cmd.current_dir(&ansible_dir);
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+    
+    let output = cmd.output().await.map_err(|e| e.to_string())?;
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    
+    let mut result: Vec<String> = Vec::new();
+    
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+        if let Some(all_data) = json.get("all") {
+            if let Some(obj) = all_data.as_object() {
+                if let Some(children_obj) = obj.get("children") {
+                    if let Some(child_arr) = children_obj.as_array() {
+                        for g in child_arr {
+                            if let Some(name) = g.as_str() {
+                                result.push(name.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    result.sort();
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn list_children(inventory: String, group: String) -> Result<Vec<String>, String> {
+    let ansible_dir = get_ansible_dir();
+    
+    let mut cmd = Command::new("ansible-inventory");
+    cmd.arg("-i").arg(&inventory).arg("--list");
+    cmd.current_dir(&ansible_dir);
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+    
+    let output = cmd.output().await.map_err(|e| e.to_string())?;
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    
+    let mut result: Vec<String> = Vec::new();
+    
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+        if let Some(group_data) = json.get(&group) {
+            if let Some(obj) = group_data.as_object() {
+                if let Some(hosts_obj) = obj.get("hosts") {
+                    if let Some(hosts_arr) = hosts_obj.as_array() {
+                        for h in hosts_arr {
+                            if let Some(name) = h.as_str() {
+                                result.push(name.to_string());
+                            }
+                        }
+                    }
+                }
+                if let Some(children_obj) = obj.get("children") {
+                    if let Some(child_arr) = children_obj.as_array() {
+                        for g in child_arr {
+                            if let Some(name) = g.as_str() {
+                                result.push(name.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    result.sort();
+    Ok(result)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

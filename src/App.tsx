@@ -3,7 +3,7 @@ import { useAppStore } from "./store/appStore";
 import "./styles.css";
 
 export default function App() {
-  const { loadData, inventories, playbooks, groups, selectedInventory, selectedPlaybook, limit, status, output, selectInventory, selectPlaybook, setLimit, execute } = useAppStore();
+  const { loadData, inventories, playbooks, groups, layer2, selectedInventory, selectedPlaybook, limit, status, output, selectInventory, selectPlaybook, setLimit, loadLayer2, execute } = useAppStore();
 
   useEffect(() => {
     loadData();
@@ -32,11 +32,13 @@ export default function App() {
           selectedInventory={selectedInventory}
           selectedPlaybook={selectedPlaybook}
           groups={groups}
+          layer2={layer2}
           limit={limit}
           status={status}
           output={output}
           canExecute={canExecute}
           onLimitChange={setLimit}
+          onGroupChange={loadLayer2}
           onExecute={execute}
         />
       </div>
@@ -96,15 +98,17 @@ function SidebarPanel({ title, items, selectedItem, onSelect }: {
   );
 }
 
-function Terminal({ selectedInventory, selectedPlaybook, groups, limit, status, output, canExecute, onLimitChange, onExecute }: {
+function Terminal({ selectedInventory, selectedPlaybook, groups, layer2, limit, status, output, canExecute, onLimitChange, onGroupChange, onExecute }: {
   selectedInventory: any;
   selectedPlaybook: any;
   groups: string[];
+  layer2: string[];
   limit: string;
   status: string;
   output: any[];
   canExecute: boolean;
   onLimitChange: (limit: string) => void;
+  onGroupChange: (group: string) => void;
   onExecute: () => void;
 }) {
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -137,28 +141,39 @@ function Terminal({ selectedInventory, selectedPlaybook, groups, limit, status, 
           </div>
         </div>
         <div className="terminal-toolbar">
-          <div className="limit-input-row">
-            <input
-              type="text"
-              className="limit-input"
-              placeholder="--limit (host or group)"
-              value={limit}
-              onChange={(e) => onLimitChange(e.target.value)}
-            />
-            {groups.length > 0 && (
+          <div className="limit-input-stack">
+            <div className="limit-input-row">
               <select 
                 className="limit-select"
-                value={limit}
-                onChange={(e) => onLimitChange(e.target.value)}
+                value=""
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val) {
+                    onGroupChange(val);
+                    onLimitChange(val);
+                  }
+                }}
               >
                 <option value="">Select group...</option>
                 {groups.map(g => (
                   <option key={g} value={g}>{g}</option>
                 ))}
               </select>
-            )}
+              {layer2.length > 0 && (
+                <select 
+                  className="limit-select"
+                  value={limit}
+                  onChange={(e) => onLimitChange(e.target.value)}
+                >
+                  <option value="">Select host or child...</option>
+                  {layer2.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            {command && <div className="terminal-command-display">{command}</div>}
           </div>
-          {command && <div className="terminal-command-display">{command}</div>}
         </div>
         <div className="terminal-content">
           <div className="terminal-empty">Select an inventory and playbook to get started</div>
@@ -184,26 +199,37 @@ function Terminal({ selectedInventory, selectedPlaybook, groups, limit, status, 
         </div>
       </div>
       <div className="terminal-toolbar">
-        <div className="limit-input-row">
-          <input
-            type="text"
-            className="limit-input"
-            placeholder="--limit (host or group)"
-            value={limit}
-            onChange={(e) => onLimitChange(e.target.value)}
-          />
-          {groups.length > 0 && (
+        <div className="limit-input-stack">
+          <div className="limit-input-row">
             <select 
               className="limit-select"
-              value={limit}
-              onChange={(e) => onLimitChange(e.target.value)}
+              value=""
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val) {
+                  onGroupChange(val);
+                  onLimitChange(val);
+                }
+              }}
             >
               <option value="">Select group...</option>
               {groups.map(g => (
                 <option key={g} value={g}>{g}</option>
               ))}
             </select>
-          )}
+            {layer2.length > 0 && (
+              <select 
+                className="limit-select"
+                value={limit}
+                onChange={(e) => onLimitChange(e.target.value)}
+              >
+                <option value="">Select host or child...</option>
+                {layer2.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            )}
+          </div>
           {command && <div className="terminal-command-display">{command}</div>}
         </div>
       </div>

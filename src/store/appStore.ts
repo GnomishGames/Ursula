@@ -7,6 +7,7 @@ interface AppState {
   inventories: Inventory[];
   playbooks: Playbook[];
   groups: string[];
+  layer2: string[];
   selectedInventory: Inventory | null;
   selectedPlaybook: Playbook | null;
   limit: string;
@@ -17,6 +18,7 @@ interface AppState {
   selectInventory: (inv: Inventory | null) => void;
   selectPlaybook: (pb: Playbook | null) => void;
   setLimit: (limit: string) => void;
+  loadLayer2: (group: string) => Promise<void>;
   execute: () => Promise<void>;
   clearOutput: () => void;
 }
@@ -25,6 +27,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   inventories: [],
   playbooks: [],
   groups: [],
+  layer2: [],
   selectedInventory: null,
   selectedPlaybook: null,
   limit: "",
@@ -44,13 +47,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   selectInventory: async (inv) => {
-    set({ selectedInventory: inv, groups: [], limit: "" });
+    set({ selectedInventory: inv, groups: [], layer2: [], limit: "" });
     if (inv) {
       try {
-        const groups = await invoke<string[]>("list_groups", { inventory: inv.path });
-        set({ groups });
+        const groups = await invoke<string[]>("list_all_children", { inventory: inv.path });
+        set({ groups, layer2: [] });
       } catch {
-        set({ groups: [] });
+        set({ groups: [], layer2: [] });
       }
     }
   },
@@ -58,6 +61,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectPlaybook: (pb) => set({ selectedPlaybook: pb }),
 
   setLimit: (limit) => set({ limit }),
+
+  loadLayer2: async (group) => {
+    const { selectedInventory } = get();
+    if (!selectedInventory || !group) return;
+    try {
+      const layer2 = await invoke<string[]>("list_children", { 
+        inventory: selectedInventory.path, 
+        group 
+      });
+      set({ layer2 });
+    } catch {
+      set({ layer2: [] });
+    }
+  },
 
   execute: async () => {
     const { selectedInventory, selectedPlaybook, limit, clearOutput } = get();
