@@ -29,6 +29,8 @@ export default function App() {
       </div>
       <div className="main-area">
         <Terminal
+          selectedInventory={selectedInventory}
+          selectedPlaybook={selectedPlaybook}
           groups={groups}
           limit={limit}
           status={status}
@@ -94,7 +96,9 @@ function SidebarPanel({ title, items, selectedItem, onSelect }: {
   );
 }
 
-function Terminal({ groups, limit, status, output, canExecute, onLimitChange, onExecute }: {
+function Terminal({ selectedInventory, selectedPlaybook, groups, limit, status, output, canExecute, onLimitChange, onExecute }: {
+  selectedInventory: any;
+  selectedPlaybook: any;
   groups: string[];
   limit: string;
   status: string;
@@ -105,6 +109,10 @@ function Terminal({ groups, limit, status, output, canExecute, onLimitChange, on
 }) {
   const terminalRef = useRef<HTMLDivElement>(null);
   
+  const command = selectedInventory && selectedPlaybook 
+    ? `ansible-playbook -i ${selectedInventory.name} ${selectedPlaybook.name}${limit ? ` --limit ${limit}` : ''}`
+    : '';
+
   useEffect(() => {
     if (terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
@@ -150,6 +158,7 @@ function Terminal({ groups, limit, status, output, canExecute, onLimitChange, on
               </select>
             )}
           </div>
+          {command && <div className="terminal-command-display">{command}</div>}
         </div>
         <div className="terminal-content">
           <div className="terminal-empty">Select an inventory and playbook to get started</div>
@@ -195,6 +204,7 @@ function Terminal({ groups, limit, status, output, canExecute, onLimitChange, on
               ))}
             </select>
           )}
+          {command && <div className="terminal-command-display">{command}</div>}
         </div>
       </div>
       <div className="terminal-content" ref={terminalRef}>

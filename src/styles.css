@@ -569,6 +569,17 @@ html, body, #root {
   border-color: var(--accent);
 }
 
+.terminal-command-display {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-top: 6px;
+}
+
 .terminal-command {
   font-family: var(--font-mono);
   font-size: 11px;
