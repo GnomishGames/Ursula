@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
 
 :root {
+  --color-scheme: dark;
   --bg-base: #1a1a1a;
   --bg-surface: #1e1e1e;
   --bg-elevated: #252525;
@@ -15,12 +16,15 @@
   --green: #3fb950;
   --red: #ff7b72;
   --yellow: #e3b341;
+  --terminal-bg: #1a1a1a;
+  --terminal-text: #e0e0e0;
 
   --header-height: 44px;
   --font-ui: 'IBM Plex Sans', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', 'JetBrains Mono', monospace;
   --radius: 6px;
   --radius-sm: 4px;
+  color-scheme: var(--color-scheme);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -234,7 +238,7 @@ html, body, #root {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--bg-base);
+  background: var(--terminal-bg);
   overflow: hidden;
 }
 
@@ -384,8 +388,8 @@ html, body, #root {
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.5;
-  background: var(--bg-base);
-  color: var(--text-primary);
+  background: var(--terminal-bg);
+  color: var(--terminal-text);
 }
 
 .terminal-content::-webkit-scrollbar { width: 6px; }
@@ -401,16 +405,16 @@ html, body, #root {
   word-break: break-all;
 }
 
-.terminal-line--stdout { color: var(--text-primary); }
+.terminal-line--stdout { color: var(--terminal-text); }
 .terminal-line--stderr { color: var(--red); }
 .terminal-line--success { color: var(--green); font-weight: bold; }
 .terminal-line--error { color: var(--red); font-weight: bold; }
 .terminal-line--warning { color: var(--yellow); }
 .terminal-line--header { color: var(--accent); font-weight: 600; }
 .terminal-line--muted { color: var(--text-muted); font-style: italic; }
-.terminal-line--mixed { color: var(--text-primary); }
+.terminal-line--mixed { color: var(--terminal-text); }
 
-.terminal-part--stdout { color: var(--text-primary); }
+.terminal-part--stdout { color: var(--terminal-text); }
 .terminal-part--stderr { color: var(--red); }
 .terminal-part--success { color: var(--green); font-weight: bold; }
 .terminal-part--error { color: var(--red); font-weight: bold; }
@@ -634,7 +638,7 @@ html, body, #root {
 
 .theme-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px;
 }
 
