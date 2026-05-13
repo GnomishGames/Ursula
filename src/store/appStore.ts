@@ -3,37 +3,45 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Inventory, Playbook, ExecutionStatus, OutputLine } from "../types";
 
+interface AppConfig {
+  ansible_dir: string;
+  inventory_dir: string;
+  playbook_dir: string;
+}
+
 interface AppState {
   inventories: Inventory[];
   playbooks: Playbook[];
-  groups: string[];
-  layer2: string[];
   selectedInventory: Inventory | null;
   selectedPlaybook: Playbook | null;
   limit: string;
   status: ExecutionStatus;
   output: OutputLine[];
+  config: AppConfig | null;
+  settingsOpen: boolean;
 
   loadData: () => Promise<void>;
   selectInventory: (inv: Inventory | null) => void;
   selectPlaybook: (pb: Playbook | null) => void;
   setLimit: (limit: string) => void;
-  loadLayer2: (group: string) => Promise<void>;
   execute: () => Promise<void>;
   kill: () => Promise<void>;
   clearOutput: () => void;
+  loadSettings: () => Promise<void>;
+  saveSettings: (config: AppConfig) => Promise<void>;
+  toggleSettings: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
   inventories: [],
   playbooks: [],
-  groups: [],
-  layer2: [],
   selectedInventory: null,
   selectedPlaybook: null,
   limit: "",
   status: "idle",
   output: [],
+  config: null,
+  settingsOpen: false,
 
   loadData: async () => {
     try {
@@ -47,35 +55,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  selectInventory: async (inv) => {
-    set({ selectedInventory: inv, groups: [], layer2: [], limit: "" });
-    if (inv) {
-      try {
-        const groups = await invoke<string[]>("list_all_children", { inventory: inv.path });
-        set({ groups, layer2: [] });
-      } catch {
-        set({ groups: [], layer2: [] });
-      }
-    }
-  },
+  selectInventory: (inv) => set({ selectedInventory: inv, limit: "" }),
 
   selectPlaybook: (pb) => set({ selectedPlaybook: pb }),
 
   setLimit: (limit) => set({ limit }),
-
-  loadLayer2: async (group) => {
-    const { selectedInventory } = get();
-    if (!selectedInventory || !group) return;
-    try {
-      const layer2 = await invoke<string[]>("list_children", { 
-        inventory: selectedInventory.path, 
-        group 
-      });
-      set({ layer2 });
-    } catch {
-      set({ layer2: [] });
-    }
-  },
 
   execute: async () => {
     const { selectedInventory, selectedPlaybook, limit, clearOutput } = get();
@@ -119,4 +103,24 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   clearOutput: () => set({ output: [], status: "idle" }),
+
+  loadSettings: async () => {
+    try {
+      const config = await invoke<AppConfig>("get_settings");
+      set({ config });
+    } catch {
+      set({ config: null });
+    }
+  },
+
+  saveSettings: async (config) => {
+    try {
+      await invoke("save_settings", { config });
+      set({ config, settingsOpen: false });
+      await get().loadData();
+    } catch {
+    }
+  },
+
+  toggleSettings: () => set((state) => ({ settingsOpen: !state.settingsOpen })),
 }));

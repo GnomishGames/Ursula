@@ -1,6 +1,6 @@
 mod commands;
 
-use commands::{list_inventories, list_playbooks, list_all_children, list_children, run_playbook, kill_playbook};
+use commands::{list_inventories, list_playbooks, run_playbook, kill_playbook, get_settings, save_settings};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -10,10 +10,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_inventories,
             list_playbooks,
-            list_all_children,
-            list_children,
             run_playbook,
             kill_playbook,
+            get_settings,
+            save_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
