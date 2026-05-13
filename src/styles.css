@@ -421,6 +421,52 @@ html, body, #root {
 .terminal-part--warning { color: var(--yellow); font-weight: bold; }
 .terminal-part--muted { color: var(--text-muted); font-style: italic; }
 
+/* ── File Preview ───────────────────────────────── */
+.terminal-preview-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.terminal-preview-path {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+}
+
+.terminal-line--preview {
+  display: flex;
+  gap: 12px;
+}
+
+.terminal-line-num {
+  color: var(--text-muted);
+  text-align: right;
+  min-width: 2.5em;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.preview-back-btn {
+  padding: 4px 10px;
+  background: none;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.preview-back-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 /* ── Status Bar ────────────────────────────────── */
 .status-bar {
   display: flex;

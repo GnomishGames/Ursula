@@ -442,6 +442,11 @@ pub async fn run_playbook(app: AppHandle, inventory: String, playbook: String, l
 }
 
 #[tauri::command]
+pub async fn read_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn kill_playbook() -> Result<(), String> {
     if let Some(pid) = get_running_pid() {
         eprintln!("Killing PID: {}", pid);

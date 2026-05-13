@@ -1,6 +1,6 @@
 mod commands;
 
-use commands::{list_inventories, list_playbooks, run_playbook, kill_playbook, get_settings, save_settings};
+use commands::{list_inventories, list_playbooks, run_playbook, kill_playbook, get_settings, save_settings, read_file};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -14,6 +14,7 @@ pub fn run() {
             kill_playbook,
             get_settings,
             save_settings,
+            read_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

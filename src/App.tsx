@@ -3,7 +3,7 @@ import { useAppStore, THEMES } from "./store/appStore";
 import "./styles.css";
 
 export default function App() {
-  const { loadData, inventories, playbooks, selectedInventory, selectedPlaybook, limit, status, output, selectInventory, selectPlaybook, setLimit, execute, kill, config, settingsOpen, loadSettings, toggleSettings, saveSettings, theme, setTheme } = useAppStore();
+  const { loadData, inventories, playbooks, selectedInventory, selectedPlaybook, limit, status, output, filePreview, selectInventory, selectPlaybook, setLimit, execute, kill, closeFilePreview, config, settingsOpen, loadSettings, toggleSettings, saveSettings, theme, setTheme } = useAppStore();
 
   const [leftWidth, setLeftWidth] = useState(200);
   const [rightWidth, setRightWidth] = useState(200);
@@ -89,10 +89,12 @@ export default function App() {
             limit={limit}
             status={status}
             output={output}
+            filePreview={filePreview}
             canExecute={canExecute}
             onLimitChange={setLimit}
             onExecute={execute}
             onKill={kill}
+            onClosePreview={closeFilePreview}
           />
         </div>
       </div>
@@ -298,16 +300,18 @@ function SidebarPanel({ title, items, selectedItem, onSelect }: {
   );
 }
 
-function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, canExecute, onLimitChange, onExecute, onKill }: {
+function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, filePreview, canExecute, onLimitChange, onExecute, onKill, onClosePreview }: {
   selectedInventory: any;
   selectedPlaybook: any;
   limit: string;
   status: string;
   output: any[];
+  filePreview: { name: string; path: string; content: string } | null;
   canExecute: boolean;
   onLimitChange: (limit: string) => void;
   onExecute: () => void;
   onKill: () => void;
+  onClosePreview: () => void;
 }) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
@@ -330,42 +334,81 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
     }
   }, [output]);
 
-  const hasSelection = output.length > 0 || status !== "idle";
+  const showPreview = filePreview !== null && status !== "running";
+  const showOutput = !showPreview && (status === "running" || status === "success" || status === "failed" || output.length > 0);
 
-  if (!hasSelection) {
+  const toolbar = (
+    <div className="terminal-toolbar">
+      <input
+        type="text"
+        className="limit-input"
+        placeholder="--limit (optional)"
+        value={limit}
+        onChange={(e) => onLimitChange(e.target.value)}
+      />
+      {fullCommand && (
+        <div className="command-wrapper">
+          <div className="terminal-command-display">{fullCommand}</div>
+          <button className="copy-btn" onClick={copyToClipboard} title="Copy command">
+            {copied ? <CheckIcon /> : <CopyIcon />}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  const runOrStop = status === "running"
+    ? <button className="execute-btn" onClick={onKill} style={{ background: 'var(--red)' }}><StopIcon />Stop</button>
+    : <button className="execute-btn" disabled={!canExecute} onClick={onExecute}><PlayIcon />Run</button>;
+
+  if (showPreview) {
     return (
       <div className="terminal">
         <div className="terminal-header">
           <div className="terminal-title">
-            <span className="terminal-status-dot terminal-status-dot--idle"></span>
-            <span className="terminal-status-text">Ready</span>
+            <PlaybookIcon />
+            <span className="terminal-status-text terminal-preview-name">{filePreview!.name}</span>
+            <span className="terminal-preview-path">{filePreview!.path}</span>
           </div>
           <div className="terminal-actions">
-            <button className="execute-btn" disabled={!canExecute} onClick={onExecute}>
-              <PlayIcon />
-              Run
-            </button>
+            {output.length > 0 && (
+              <button className="preview-back-btn" onClick={onClosePreview}>← Output</button>
+            )}
+            {runOrStop}
           </div>
         </div>
-        <div className="terminal-toolbar">
-          <input
-            type="text"
-            className="limit-input"
-            placeholder="--limit (optional)"
-            value={limit}
-            onChange={(e) => onLimitChange(e.target.value)}
-          />
-          {fullCommand && (
-            <div className="command-wrapper">
-              <div className="terminal-command-display">{fullCommand}</div>
-              <button className="copy-btn" onClick={copyToClipboard} title="Copy command">
-                {copied ? <CheckIcon /> : <CopyIcon />}
-              </button>
+        {toolbar}
+        <div className="terminal-content" ref={terminalRef}>
+          {filePreview!.content.split("\n").map((line, i) => (
+            <div key={i} className="terminal-line terminal-line--preview">
+              <span className="terminal-line-num">{i + 1}</span>
+              <span>{line}</span>
             </div>
-          )}
+          ))}
         </div>
-        <div className="terminal-content">
-          <div className="terminal-empty">Select an inventory and playbook to get started</div>
+      </div>
+    );
+  }
+
+  if (showOutput) {
+    return (
+      <div className="terminal">
+        <div className="terminal-header">
+          <div className="terminal-title">
+            <span className={`terminal-status-dot terminal-status-dot--${status}`}></span>
+            <span className="terminal-status-text">
+              {status === "running" ? "Running..." : status === "success" ? "Completed" : status === "failed" ? "Failed" : "Ready"}
+            </span>
+          </div>
+          <div className="terminal-actions">
+            {runOrStop}
+          </div>
+        </div>
+        {toolbar}
+        <div className="terminal-content" ref={terminalRef}>
+          {output.map((line, i) => (
+            <AnsiLine key={i} line={line.line} stream={line.stream} />
+          ))}
         </div>
       </div>
     );
@@ -375,46 +418,16 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
     <div className="terminal">
       <div className="terminal-header">
         <div className="terminal-title">
-          <span className={`terminal-status-dot terminal-status-dot--${status}`}></span>
-          <span className="terminal-status-text">
-            {status === "running" ? "Running..." : status === "success" ? "Completed" : status === "failed" ? "Failed" : "Ready"}
-          </span>
+          <span className="terminal-status-dot terminal-status-dot--idle"></span>
+          <span className="terminal-status-text">Ready</span>
         </div>
         <div className="terminal-actions">
-          {status === "running" ? (
-            <button className="execute-btn" onClick={onKill} style={{ background: 'var(--red)' }}>
-              <StopIcon />
-              Stop
-            </button>
-          ) : (
-            <button className="execute-btn" disabled={!canExecute} onClick={onExecute}>
-              <PlayIcon />
-              Run
-            </button>
-          )}
+          {runOrStop}
         </div>
       </div>
-      <div className="terminal-toolbar">
-        <input
-          type="text"
-          className="limit-input"
-          placeholder="--limit (optional)"
-          value={limit}
-          onChange={(e) => onLimitChange(e.target.value)}
-        />
-        {fullCommand && (
-          <div className="command-wrapper">
-            <div className="terminal-command-display">{fullCommand}</div>
-            <button className="copy-btn" onClick={copyToClipboard} title="Copy command">
-              {copied ? <CheckIcon /> : <CopyIcon />}
-            </button>
-          </div>
-        )}
-      </div>
-      <div className="terminal-content" ref={terminalRef}>
-        {output.map((line, i) => (
-          <AnsiLine key={i} line={line.line} stream={line.stream} />
-        ))}
+      {toolbar}
+      <div className="terminal-content">
+        <div className="terminal-empty">Select an inventory and playbook to get started</div>
       </div>
     </div>
   );

@@ -211,6 +211,12 @@ export function applyTheme(vars: Record<string, string>) {
   }
 }
 
+interface FilePreview {
+  name: string;
+  path: string;
+  content: string;
+}
+
 interface AppState {
   inventories: Inventory[];
   playbooks: Playbook[];
@@ -219,6 +225,7 @@ interface AppState {
   limit: string;
   status: ExecutionStatus;
   output: OutputLine[];
+  filePreview: FilePreview | null;
   config: AppConfig | null;
   settingsOpen: boolean;
   theme: string;
@@ -230,6 +237,8 @@ interface AppState {
   execute: () => Promise<void>;
   kill: () => Promise<void>;
   clearOutput: () => void;
+  loadFilePreview: (path: string, name: string) => Promise<void>;
+  closeFilePreview: () => void;
   loadSettings: () => Promise<void>;
   saveSettings: (config: AppConfig) => Promise<void>;
   toggleSettings: () => void;
@@ -244,6 +253,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   limit: "",
   status: "idle",
   output: [],
+  filePreview: null,
   config: null,
   settingsOpen: false,
   theme: localStorage.getItem("ursula-theme") || "midnight",
@@ -260,9 +270,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  selectInventory: (inv) => set({ selectedInventory: inv, limit: "" }),
+  selectInventory: (inv) => {
+    set({ selectedInventory: inv, limit: "" });
+    if (inv && get().status !== "running") get().loadFilePreview(inv.path, inv.name);
+  },
 
-  selectPlaybook: (pb) => set({ selectedPlaybook: pb }),
+  selectPlaybook: (pb) => {
+    set({ selectedPlaybook: pb });
+    if (pb && get().status !== "running") get().loadFilePreview(pb.path, pb.name);
+  },
 
   setLimit: (limit) => set({ limit }),
 
@@ -270,6 +286,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { selectedInventory, selectedPlaybook, limit, clearOutput } = get();
     if (!selectedInventory || !selectedPlaybook) return;
 
+    set({ filePreview: null });
     clearOutput();
     set({ status: "running" });
 
@@ -308,6 +325,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   clearOutput: () => set({ output: [], status: "idle" }),
+
+  loadFilePreview: async (path, name) => {
+    try {
+      const content = await invoke<string>("read_file", { path });
+      set({ filePreview: { name, path, content } });
+    } catch {}
+  },
+
+  closeFilePreview: () => set({ filePreview: null }),
 
   loadSettings: async () => {
     try {
