@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef, useCallback, memo } from "react";
-import { useAppStore } from "./store/appStore";
+import { useAppStore, THEMES } from "./store/appStore";
 import "./styles.css";
 
 export default function App() {
-  const { loadData, inventories, playbooks, selectedInventory, selectedPlaybook, limit, status, output, selectInventory, selectPlaybook, setLimit, execute, kill, config, settingsOpen, loadSettings, toggleSettings, saveSettings } = useAppStore();
+  const { loadData, inventories, playbooks, selectedInventory, selectedPlaybook, limit, status, output, selectInventory, selectPlaybook, setLimit, execute, kill, config, settingsOpen, loadSettings, toggleSettings, saveSettings, theme, setTheme } = useAppStore();
 
   const [leftWidth, setLeftWidth] = useState(200);
   const [rightWidth, setRightWidth] = useState(200);
@@ -51,6 +51,8 @@ export default function App() {
       {settingsOpen && (
         <SettingsPanel
           config={config}
+          theme={theme}
+          onThemeChange={setTheme}
           onSave={saveSettings}
           onClose={toggleSettings}
         />
@@ -99,11 +101,14 @@ export default function App() {
   );
 }
 
-function SettingsPanel({ config, onSave, onClose }: {
+function SettingsPanel({ config, theme, onThemeChange, onSave, onClose }: {
   config: { ansible_dir: string; inventory_dir: string; playbook_dir: string } | null;
+  theme: string;
+  onThemeChange: (id: string) => void;
   onSave: (config: { ansible_dir: string; inventory_dir: string; playbook_dir: string }) => void;
   onClose: () => void;
 }) {
+  const [activeTab, setActiveTab] = useState<"general" | "appearance">("general");
   const [ansibleDir, setAnsibleDir] = useState(config?.ansible_dir || "");
   const [inventoryDir, setInventoryDir] = useState(config?.inventory_dir || "");
   const [playbookDir, setPlaybookDir] = useState(config?.playbook_dir || "");
@@ -127,39 +132,76 @@ function SettingsPanel({ config, onSave, onClose }: {
           <span className="settings-title">Settings</span>
           <button className="settings-close" onClick={onClose}><CloseIcon /></button>
         </div>
-        <div className="settings-content">
-          <div className="settings-field">
-            <label>Ansible Directory</label>
-            <input
-              type="text"
-              value={ansibleDir}
-              onChange={(e) => setAnsibleDir(e.target.value)}
-              placeholder="/path/to/ansible"
-            />
-          </div>
-          <div className="settings-field">
-            <label>Inventory Directory</label>
-            <input
-              type="text"
-              value={inventoryDir}
-              onChange={(e) => setInventoryDir(e.target.value)}
-              placeholder="/path/to/inventory"
-            />
-          </div>
-          <div className="settings-field">
-            <label>Playbook Directory</label>
-            <input
-              type="text"
-              value={playbookDir}
-              onChange={(e) => setPlaybookDir(e.target.value)}
-              placeholder="/path/to/playbooks"
-            />
-          </div>
+        <div className="settings-tabs">
+          <button
+            className={`settings-tab${activeTab === "general" ? " settings-tab--active" : ""}`}
+            onClick={() => setActiveTab("general")}
+          >General</button>
+          <button
+            className={`settings-tab${activeTab === "appearance" ? " settings-tab--active" : ""}`}
+            onClick={() => setActiveTab("appearance")}
+          >Appearance</button>
         </div>
-        <div className="settings-footer">
-          <button className="settings-cancel" onClick={onClose}>Cancel</button>
-          <button className="settings-save" onClick={handleSave}>Save</button>
-        </div>
+        {activeTab === "general" ? (
+          <>
+            <div className="settings-content">
+              <div className="settings-field">
+                <label>Ansible Directory</label>
+                <input
+                  type="text"
+                  value={ansibleDir}
+                  onChange={(e) => setAnsibleDir(e.target.value)}
+                  placeholder="/path/to/ansible"
+                />
+              </div>
+              <div className="settings-field">
+                <label>Inventory Directory</label>
+                <input
+                  type="text"
+                  value={inventoryDir}
+                  onChange={(e) => setInventoryDir(e.target.value)}
+                  placeholder="/path/to/inventory"
+                />
+              </div>
+              <div className="settings-field">
+                <label>Playbook Directory</label>
+                <input
+                  type="text"
+                  value={playbookDir}
+                  onChange={(e) => setPlaybookDir(e.target.value)}
+                  placeholder="/path/to/playbooks"
+                />
+              </div>
+            </div>
+            <div className="settings-footer">
+              <button className="settings-cancel" onClick={onClose}>Cancel</button>
+              <button className="settings-save" onClick={handleSave}>Save</button>
+            </div>
+          </>
+        ) : (
+          <div className="settings-content">
+            <span className="settings-section-label">Theme</span>
+            <div className="theme-grid">
+              {THEMES.map((t) => (
+                <button
+                  key={t.id}
+                  className={`theme-card${theme === t.id ? " theme-card--selected" : ""}`}
+                  onClick={() => onThemeChange(t.id)}
+                >
+                  <div className="theme-preview">
+                    <div style={{ flex: 1, background: t.vars["--bg-surface"] }} />
+                    <div style={{ flex: 1, background: t.vars["--bg-elevated"] }} />
+                    <div style={{ width: 12, background: t.vars["--accent"] }} />
+                    <div style={{ width: 8, background: t.vars["--green"] }} />
+                    <div style={{ width: 8, background: t.vars["--red"] }} />
+                  </div>
+                  <span className="theme-name">{t.name}</span>
+                  {theme === t.id && <span className="theme-check">✓</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

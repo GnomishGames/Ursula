@@ -9,6 +9,122 @@ interface AppConfig {
   playbook_dir: string;
 }
 
+export interface Theme {
+  id: string;
+  name: string;
+  vars: Record<string, string>;
+}
+
+export const THEMES: Theme[] = [
+  {
+    id: "midnight",
+    name: "Midnight",
+    vars: {
+      "--bg-base": "#1a1a1a",
+      "--bg-surface": "#1e1e1e",
+      "--bg-elevated": "#252525",
+      "--bg-hover": "#2a2a2a",
+      "--border": "#333",
+      "--border-light": "#444",
+      "--text-primary": "#e0e0e0",
+      "--text-secondary": "#888",
+      "--text-muted": "#555",
+      "--accent": "#58a6ff",
+      "--accent-dim": "#1a3a5c",
+      "--green": "#3fb950",
+      "--red": "#ff7b72",
+      "--yellow": "#e3b341",
+    },
+  },
+  {
+    id: "dracula",
+    name: "Dracula",
+    vars: {
+      "--bg-base": "#282a36",
+      "--bg-surface": "#21222c",
+      "--bg-elevated": "#343746",
+      "--bg-hover": "#3d3f4f",
+      "--border": "#44475a",
+      "--border-light": "#6272a4",
+      "--text-primary": "#f8f8f2",
+      "--text-secondary": "#bd93f9",
+      "--text-muted": "#6272a4",
+      "--accent": "#bd93f9",
+      "--accent-dim": "#362b5a",
+      "--green": "#50fa7b",
+      "--red": "#ff5555",
+      "--yellow": "#f1fa8c",
+    },
+  },
+  {
+    id: "nord",
+    name: "Nord",
+    vars: {
+      "--bg-base": "#2e3440",
+      "--bg-surface": "#3b4252",
+      "--bg-elevated": "#434c5e",
+      "--bg-hover": "#4c566a",
+      "--border": "#434c5e",
+      "--border-light": "#4c566a",
+      "--text-primary": "#eceff4",
+      "--text-secondary": "#d8dee9",
+      "--text-muted": "#81a1c1",
+      "--accent": "#88c0d0",
+      "--accent-dim": "#3d4e62",
+      "--green": "#a3be8c",
+      "--red": "#bf616a",
+      "--yellow": "#ebcb8b",
+    },
+  },
+  {
+    id: "gruvbox",
+    name: "Gruvbox",
+    vars: {
+      "--bg-base": "#282828",
+      "--bg-surface": "#3c3836",
+      "--bg-elevated": "#504945",
+      "--bg-hover": "#665c54",
+      "--border": "#504945",
+      "--border-light": "#665c54",
+      "--text-primary": "#ebdbb2",
+      "--text-secondary": "#a89984",
+      "--text-muted": "#7c6f64",
+      "--accent": "#fe8019",
+      "--accent-dim": "#3d3120",
+      "--green": "#b8bb26",
+      "--red": "#fb4934",
+      "--yellow": "#fabd2f",
+    },
+  },
+  {
+    id: "catppuccin",
+    name: "Catppuccin",
+    vars: {
+      "--bg-base": "#1e1e2e",
+      "--bg-surface": "#181825",
+      "--bg-elevated": "#313244",
+      "--bg-hover": "#45475a",
+      "--border": "#313244",
+      "--border-light": "#45475a",
+      "--text-primary": "#cdd6f4",
+      "--text-secondary": "#bac2de",
+      "--text-muted": "#7f849c",
+      "--accent": "#cba6f7",
+      "--accent-dim": "#2a273f",
+      "--green": "#a6e3a1",
+      "--red": "#f38ba8",
+      "--yellow": "#f9e2af",
+    },
+  },
+];
+
+export function applyTheme(vars: Record<string, string>) {
+  const root = document.documentElement;
+  for (const [key, value] of Object.entries(vars)) {
+    root.style.setProperty(key, value);
+  }
+}
+
 interface AppState {
   inventories: Inventory[];
   playbooks: Playbook[];
@@ -19,6 +135,7 @@ interface AppState {
   output: OutputLine[];
   config: AppConfig | null;
   settingsOpen: boolean;
+  theme: string;
 
   loadData: () => Promise<void>;
   selectInventory: (inv: Inventory | null) => void;
@@ -30,6 +147,7 @@ interface AppState {
   loadSettings: () => Promise<void>;
   saveSettings: (config: AppConfig) => Promise<void>;
   toggleSettings: () => void;
+  setTheme: (id: string) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -42,6 +160,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   output: [],
   config: null,
   settingsOpen: false,
+  theme: localStorage.getItem("ursula-theme") || "midnight",
 
   loadData: async () => {
     try {
@@ -107,7 +226,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadSettings: async () => {
     try {
       const config = await invoke<AppConfig>("get_settings");
-      set({ config });
+      const savedId = localStorage.getItem("ursula-theme") || "midnight";
+      const saved = THEMES.find((t) => t.id === savedId) ?? THEMES[0];
+      applyTheme(saved.vars);
+      set({ config, theme: saved.id });
     } catch {
       set({ config: null });
     }
@@ -118,9 +240,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       await invoke("save_settings", { config });
       set({ config, settingsOpen: false });
       await get().loadData();
-    } catch {
-    }
+    } catch {}
   },
 
   toggleSettings: () => set((state) => ({ settingsOpen: !state.settingsOpen })),
+
+  setTheme: (id) => {
+    const theme = THEMES.find((t) => t.id === id);
+    if (!theme) return;
+    applyTheme(theme.vars);
+    localStorage.setItem("ursula-theme", id);
+    set({ theme: id });
+  },
 }));
