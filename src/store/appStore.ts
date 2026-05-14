@@ -229,6 +229,8 @@ interface AppState {
   config: AppConfig | null;
   settingsOpen: boolean;
   theme: string;
+  updateAvailable: boolean;
+  latestVersion: string;
 
   loadData: () => Promise<void>;
   selectInventory: (inv: Inventory | null) => void;
@@ -243,6 +245,8 @@ interface AppState {
   saveSettings: (config: AppConfig) => Promise<void>;
   toggleSettings: () => void;
   setTheme: (id: string) => void;
+  checkForUpdate: () => Promise<void>;
+  dismissUpdate: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -257,6 +261,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   config: null,
   settingsOpen: false,
   theme: localStorage.getItem("ursula-theme") || "midnight",
+  updateAvailable: false,
+  latestVersion: "",
 
   loadData: async () => {
     try {
@@ -364,4 +370,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     localStorage.setItem("ursula-theme", id);
     set({ theme: id });
   },
+
+  checkForUpdate: async () => {
+    try {
+      const info = await invoke<{ update_available: boolean; latest_version: string; current_version: string }>("check_for_updates");
+      if (info.update_available) {
+        set({ updateAvailable: true, latestVersion: info.latest_version });
+      }
+    } catch {}
+  },
+
+  dismissUpdate: () => set({ updateAvailable: false }),
 }));

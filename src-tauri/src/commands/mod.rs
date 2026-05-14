@@ -460,3 +460,60 @@ pub async fn kill_playbook() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[derive(Debug, Serialize)]
+pub struct UpdateInfo {
+    pub update_available: bool,
+    pub latest_version: String,
+    pub current_version: String,
+}
+
+#[tauri::command]
+pub async fn check_for_updates(app: AppHandle) -> Result<UpdateInfo, String> {
+    let config_version = app.config().version.clone();
+    let current_version = config_version.unwrap_or_else(|| "0.1.0".to_string());
+
+    let client = reqwest::Client::builder()
+        .user_agent("Ursula-App/1.0")
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let response = client
+        .get("https://api.github.com/repos/GnomishGames/Ursula/releases/latest")
+        .header("Accept", "application/vnd.github.v3+json")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+
+    let latest_version = json.get("tag_name")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim_start_matches('v').to_string())
+        .unwrap_or_else(|| "0.0.0".to_string());
+
+    let update_available = compare_versions(&latest_version, &current_version) > 0;
+
+    Ok(UpdateInfo {
+        update_available,
+        latest_version,
+        current_version,
+    })
+}
+
+fn compare_versions(latest: &str, current: &str) -> i32 {
+    let parse_v = |v: &str| -> Vec<u32> {
+        v.split('.').filter_map(|s| s.parse().ok()).collect()
+    };
+    let l = parse_v(latest);
+    let c = parse_v(current);
+
+    for i in 0..std::cmp::max(l.len(), c.len()) {
+        let l_part = l.get(i).unwrap_or(&0);
+        let c_part = c.get(i).unwrap_or(&0);
+        if l_part > c_part { return 1; }
+        if l_part < c_part { return -1; }
+    }
+    0
+}

@@ -3,7 +3,7 @@ import { useAppStore, THEMES } from "./store/appStore";
 import "./styles.css";
 
 export default function App() {
-  const { loadData, inventories, playbooks, selectedInventory, selectedPlaybook, limit, status, output, filePreview, selectInventory, selectPlaybook, setLimit, execute, kill, closeFilePreview, config, settingsOpen, loadSettings, toggleSettings, saveSettings, theme, setTheme } = useAppStore();
+  const { loadData, inventories, playbooks, selectedInventory, selectedPlaybook, limit, status, output, filePreview, selectInventory, selectPlaybook, setLimit, execute, kill, closeFilePreview, config, settingsOpen, loadSettings, toggleSettings, saveSettings, theme, setTheme, updateAvailable, latestVersion, dismissUpdate, checkForUpdate } = useAppStore();
 
   const [leftWidth, setLeftWidth] = useState(200);
   const [rightWidth, setRightWidth] = useState(200);
@@ -42,6 +42,7 @@ export default function App() {
   useEffect(() => {
     loadData();
     loadSettings();
+    checkForUpdate();
   }, []);
 
   const canExecute = !!(selectedInventory && selectedPlaybook && status !== "running");
@@ -55,6 +56,9 @@ export default function App() {
           onThemeChange={setTheme}
           onSave={saveSettings}
           onClose={toggleSettings}
+          updateAvailable={updateAvailable}
+          latestVersion={latestVersion}
+          checkForUpdate={checkForUpdate}
         />
       )}
       <div className="app-body">
@@ -99,18 +103,24 @@ export default function App() {
         </div>
       </div>
       <StatusBar config={config} onSettingsClick={toggleSettings} />
+      {updateAvailable && (
+        <UpdateNotification version={latestVersion} onUpdate={() => window.open("https://github.com/GnomishGames/Ursula/releases", "_blank")} onDismiss={dismissUpdate} />
+      )}
     </div>
   );
 }
 
-function SettingsPanel({ config, theme, onThemeChange, onSave, onClose }: {
+function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAvailable, latestVersion, checkForUpdate }: {
   config: { ansible_dir: string; inventory_dir: string; playbook_dir: string } | null;
   theme: string;
   onThemeChange: (id: string) => void;
   onSave: (config: { ansible_dir: string; inventory_dir: string; playbook_dir: string }) => void;
   onClose: () => void;
+  updateAvailable: boolean;
+  latestVersion: string;
+  checkForUpdate: () => Promise<void>;
 }) {
-  const [activeTab, setActiveTab] = useState<"general" | "appearance">("general");
+  const [activeTab, setActiveTab] = useState<"general" | "appearance" | "about">("general");
   const [ansibleDir, setAnsibleDir] = useState(config?.ansible_dir || "");
   const [inventoryDir, setInventoryDir] = useState(config?.inventory_dir || "");
   const [playbookDir, setPlaybookDir] = useState(config?.playbook_dir || "");
@@ -143,8 +153,12 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose }: {
             className={`settings-tab${activeTab === "appearance" ? " settings-tab--active" : ""}`}
             onClick={() => setActiveTab("appearance")}
           >Appearance</button>
+          <button
+            className={`settings-tab${activeTab === "about" ? " settings-tab--active" : ""}`}
+            onClick={() => setActiveTab("about")}
+          >About</button>
         </div>
-        {activeTab === "general" ? (
+        {activeTab === "general" && (
           <>
             <div className="settings-content">
               <div className="settings-field">
@@ -180,7 +194,8 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose }: {
               <button className="settings-save" onClick={handleSave}>Save</button>
             </div>
           </>
-        ) : (
+        )}
+        {activeTab === "appearance" && (
           <div className="settings-content">
             <span className="settings-section-label">Theme</span>
             <div className="theme-grid">
@@ -201,6 +216,22 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose }: {
                   {theme === t.id && <span className="theme-check">✓</span>}
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+        {activeTab === "about" && (
+          <div className="settings-content">
+            <div className="about-section">
+              <h2 className="about-title">Ursula</h2>
+              <p className="about-version">v0.2.0</p>
+            </div>
+            <div className="update-check-section">
+              <button className="settings-save" onClick={checkForUpdate}>Check for Updates</button>
+              {updateAvailable ? (
+                <p className="update-status update-available">Update {latestVersion} is available</p>
+              ) : (
+                <p className="update-status">You're up to date</p>
+              )}
             </div>
           </div>
         )}
@@ -585,6 +616,22 @@ function CheckIcon() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <polyline points="20,6 9,17 4,12" />
     </svg>
+  );
+}
+
+function UpdateNotification({ version, onUpdate, onDismiss }: {
+  version: string;
+  onUpdate: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="update-notification">
+      <div className="update-buttons">
+        <button className="update-btn" onClick={onUpdate}>Update</button>
+        <button className="cancel-btn" onClick={onDismiss}>Cancel</button>
+      </div>
+      <p className="update-text">Update v{version} is available</p>
+    </div>
   );
 }
 

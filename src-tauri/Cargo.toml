@@ -1,6 +1,6 @@
 [package]
 name = "ursula"
-version = "0.1.0"
+version = "0.2.0"
 description = "Ursula - Ansible Runner"
 authors = ["Ursula"]
 license = "MIT"
@@ -29,6 +29,7 @@ anyhow = "1"
 thiserror = "1"
 dirs = "5"
 lazy_static = "1.4"
+reqwest = { version = "0.12", features = ["json"] }
 
 [profile.release]
 panic = "abort"
