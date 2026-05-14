@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback, memo } from "react";
+import { open } from "@tauri-apps/plugin-shell";
 import { useAppStore, THEMES } from "./store/appStore";
 import "./styles.css";
 
@@ -104,7 +105,7 @@ export default function App() {
       </div>
       <StatusBar config={config} onSettingsClick={toggleSettings} />
       {updateAvailable && (
-        <UpdateNotification version={latestVersion} onUpdate={() => window.open("https://github.com/GnomishGames/Ursula/releases", "_blank")} onDismiss={dismissUpdate} />
+        <UpdateNotification version={latestVersion} onUpdate={() => open("https://github.com/GnomishGames/Ursula/releases")} onDismiss={dismissUpdate} />
       )}
     </div>
   );
@@ -223,7 +224,7 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
           <div className="settings-content">
             <div className="about-section">
               <h2 className="about-title">Ursula</h2>
-              <p className="about-version">v0.2.1</p>
+              <p className="about-version">v0.2.2</p>
             </div>
             <div className="update-check-section">
               <button className="settings-save" onClick={checkForUpdate}>Check for Updates</button>
