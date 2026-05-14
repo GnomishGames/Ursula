@@ -223,7 +223,7 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
           <div className="settings-content">
             <div className="about-section">
               <h2 className="about-title">Ursula</h2>
-              <p className="about-version">v0.2.0</p>
+              <p className="about-version">v0.2.1</p>
             </div>
             <div className="update-check-section">
               <button className="settings-save" onClick={checkForUpdate}>Check for Updates</button>
@@ -278,7 +278,7 @@ function SidebarPanel({ title, items, selectedItem, onSelect }: {
       <div key={item.id + item.path}>
         <button
           className={`item-btn ${isSelected ? "item-btn--selected" : ""}`}
-          style={{ paddingLeft: `${10 + depth * 16}px` }}
+          style={{ paddingLeft: item.is_folder ? `${6 + depth * 20}px` : `${14 + depth * 30}px` }}
           onClick={() => {
             if (item.is_folder) {
               toggleExpand(item.id + item.path);
