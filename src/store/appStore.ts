@@ -296,15 +296,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     clearOutput();
     set({ status: "running" });
 
+    let unlisten: (() => void) | undefined;
+    let unlistenComplete: (() => void) | undefined;
     try {
-      const unlisten = await listen<OutputLine>("ansible-output", (event) => {
+      unlisten = await listen<OutputLine>("ansible-output", (event) => {
         set((state) => ({
           output: [...state.output, event.payload],
         }));
       });
 
-      const unlistenComplete = await listen<boolean>("ansible-complete", (event) => {
-        set({ status: event ? "success" : "failed" });
+      unlistenComplete = await listen<boolean>("ansible-complete", (event) => {
+        set({ status: event.payload ? "success" : "failed" });
       });
 
       await invoke("run_playbook", {
@@ -312,14 +314,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         playbook: selectedPlaybook.path,
         limit: limit || null,
       });
-
-      unlisten();
-      unlistenComplete();
     } catch (err) {
       set({
         output: [{ line: String(err), stream: "stderr" }],
         status: "failed",
       });
+    } finally {
+      unlisten?.();
+      unlistenComplete?.();
     }
   },
 

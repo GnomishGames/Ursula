@@ -33,7 +33,8 @@ pub struct AppConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         let documents = dirs::document_dir()
-            .unwrap_or_else(|| PathBuf::from("/home/cashby/Documents"));
+            .or_else(dirs::home_dir)
+            .unwrap_or_else(|| PathBuf::from("."));
         let ansible_dir = documents.join("ansible");
         Self {
             ansible_dir: ansible_dir.to_string_lossy().to_string(),
@@ -191,23 +192,7 @@ Ok(groups)
 }
 
 lazy_static::lazy_static! {
-    static ref RUNNING_CHILD: std::sync::Mutex<Option<u32>> = std::sync::Mutex::new(None);
-}
-
-fn set_running_pid(pid: Option<u32>) {
-    if let Ok(mut lock) = RUNNING_CHILD.lock() {
-        *lock = pid;
-    }
-}
-
-fn get_running_pid() -> Option<u32> {
-    RUNNING_CHILD.lock().ok().and_then(|lock| *lock)
-}
-
-fn clear_running_pid() {
-    if let Ok(mut lock) = RUNNING_CHILD.lock() {
-        *lock = None;
-    }
+    static ref RUNNING_CHILD: tokio::sync::Mutex<Option<tokio::process::Child>> = tokio::sync::Mutex::new(None);
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -370,10 +355,12 @@ pub async fn run_playbook(app: AppHandle, inventory: String, playbook: String, l
     let config = get_config(&app);
     let ansible_dir = PathBuf::from(&config.ansible_dir);
 
-    if let Some(pid) = get_running_pid() {
-        if std::process::Command::new("kill").arg("-15").arg(pid.to_string()).spawn().is_ok() {
-            let _ = std::thread::sleep(std::time::Duration::from_millis(500));
-        }
+    // Take ownership of any existing child and kill it before starting a new run.
+    // Taking it out of the global first means kill_playbook can't race with us.
+    let old_child = { RUNNING_CHILD.lock().await.take() };
+    if let Some(mut child) = old_child {
+        let _ = child.start_kill();
+        let _ = child.wait().await;
     }
 
     let mut cmd = Command::new("ansible-playbook");
@@ -385,18 +372,15 @@ pub async fn run_playbook(app: AppHandle, inventory: String, playbook: String, l
     }
     cmd.current_dir(&ansible_dir);
     cmd.env("ANSIBLE_FORCE_COLOR", "1");
-
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
 
     let mut child = cmd.spawn().map_err(|e| e.to_string())?;
-    if let Some(pid) = child.id() {
-        eprintln!("Started ansible-playbook with PID: {}", pid);
-        set_running_pid(Some(pid));
-    }
-
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
+
+    // Store the child handle (not just the PID) so kill_playbook holds a safe reference.
+    *RUNNING_CHILD.lock().await = Some(child);
 
     let mut stdout_reader = BufReader::new(stdout).lines();
     let mut stderr_reader = BufReader::new(stderr).lines();
@@ -407,11 +391,7 @@ pub async fn run_playbook(app: AppHandle, inventory: String, playbook: String, l
     let stdout_handle = tokio::spawn(async move {
         while let Ok(Some(line)) = stdout_reader.next_line().await {
             let (stream, parts) = categorize_ansible_line(&line);
-            let _ = app_stdout.emit("ansible-output", OutputLine {
-                line,
-                stream,
-                parts,
-            });
+            let _ = app_stdout.emit("ansible-output", OutputLine { line, stream, parts });
         }
     });
 
@@ -427,15 +407,21 @@ pub async fn run_playbook(app: AppHandle, inventory: String, playbook: String, l
 
     let _ = tokio::join!(stdout_handle, stderr_handle);
 
-    let status = child.wait().await.map_err(|e| e.to_string())?;
-    clear_running_pid();
+    // Retrieve the child handle to wait on it. None means kill_playbook already took it.
+    let child = { RUNNING_CHILD.lock().await.take() };
+    let status = match child {
+        Some(mut c) => c.wait().await.map_err(|e| e.to_string())?,
+        None => {
+            let _ = app.emit("ansible-complete", false);
+            return Ok(());
+        }
+    };
 
     let _ = app.emit("ansible-output", OutputLine {
         line: format!("\nProcess exited with code {}", status.code().unwrap_or(-1)),
         stream: if status.success() { "success" } else { "error" }.to_string(),
         parts: None,
     });
-
     let _ = app.emit("ansible-complete", status.success());
 
     Ok(())
@@ -448,15 +434,16 @@ pub async fn read_file(path: String) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn kill_playbook() -> Result<(), String> {
-    if let Some(pid) = get_running_pid() {
-        eprintln!("Killing PID: {}", pid);
+    // Get the PID from the child handle while holding it — safe, no recycling possible.
+    let pid = {
+        let lock = RUNNING_CHILD.lock().await;
+        lock.as_ref().and_then(|c| c.id())
+    };
+    if let Some(pid) = pid {
         let _ = std::process::Command::new("kill")
             .arg("-15")
             .arg(pid.to_string())
             .output();
-        clear_running_pid();
-    } else {
-        eprintln!("No PID to kill");
     }
     Ok(())
 }

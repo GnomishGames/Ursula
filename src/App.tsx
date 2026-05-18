@@ -224,7 +224,7 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
           <div className="settings-content">
             <div className="about-section">
               <h2 className="about-title">Ursula</h2>
-              <p className="about-version">v0.2.2</p>
+              <p className="about-version">v0.2.3</p>
             </div>
             <div className="update-check-section">
               <button className="settings-save" onClick={checkForUpdate}>Check for Updates</button>

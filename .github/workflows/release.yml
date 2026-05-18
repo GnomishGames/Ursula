@@ -56,7 +56,17 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Ursula ${{ github.ref_name }}'
-          releaseBody: 'Download the installer for your platform from the assets below.'
+          releaseBody: |
+            ## What's new in v0.2.3
+
+            **Bug fixes:**
+            - Fixed failed playbooks incorrectly showing "success" status in the UI
+            - Fixed event listeners leaking when a playbook run encounters an error
+            - Fixed process management to use child handles instead of raw PIDs, preventing a PID recycling race condition
+            - Removed hardcoded developer home directory path from the binary default config fallback
+
+            ---
+            Download the installer for your platform from the assets below.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
