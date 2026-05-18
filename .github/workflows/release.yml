@@ -57,13 +57,12 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'Ursula ${{ github.ref_name }}'
           releaseBody: |
-            ## What's new in v0.2.3
+            ## What's new in v0.2.4
 
-            **Bug fixes:**
-            - Fixed failed playbooks incorrectly showing "success" status in the UI
-            - Fixed event listeners leaking when a playbook run encounters an error
-            - Fixed process management to use child handles instead of raw PIDs, preventing a PID recycling race condition
-            - Removed hardcoded developer home directory path from the binary default config fallback
+            **New features:**
+            - Added Git integration settings tab — enable Git and optionally run `git pull` automatically before every playbook execution
+            - About tab now checks for updates automatically when opened
+            - Update button opens the releases page directly when an update is available
 
             ---
             Download the installer for your platform from the assets below.

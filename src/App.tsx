@@ -112,30 +112,48 @@ export default function App() {
 }
 
 function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAvailable, latestVersion, checkForUpdate }: {
-  config: { ansible_dir: string; inventory_dir: string; playbook_dir: string } | null;
+  config: { ansible_dir: string; inventory_dir: string; playbook_dir: string; git_enabled: boolean; git_pull_before_run: boolean } | null;
   theme: string;
   onThemeChange: (id: string) => void;
-  onSave: (config: { ansible_dir: string; inventory_dir: string; playbook_dir: string }) => void;
+  onSave: (config: { ansible_dir: string; inventory_dir: string; playbook_dir: string; git_enabled: boolean; git_pull_before_run: boolean }) => void;
   onClose: () => void;
   updateAvailable: boolean;
   latestVersion: string;
   checkForUpdate: () => Promise<void>;
 }) {
-  const [activeTab, setActiveTab] = useState<"general" | "appearance" | "about">("general");
+  const [activeTab, setActiveTab] = useState<"general" | "git" | "appearance" | "about">("general");
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === "about") {
+      setIsCheckingUpdate(true);
+      checkForUpdate().finally(() => setIsCheckingUpdate(false));
+    }
+  }, [activeTab]);
   const [ansibleDir, setAnsibleDir] = useState(config?.ansible_dir || "");
   const [inventoryDir, setInventoryDir] = useState(config?.inventory_dir || "");
   const [playbookDir, setPlaybookDir] = useState(config?.playbook_dir || "");
+  const [gitEnabled, setGitEnabled] = useState(config?.git_enabled ?? false);
+  const [gitPullBeforeRun, setGitPullBeforeRun] = useState(config?.git_pull_before_run ?? false);
 
   useEffect(() => {
     if (config) {
       setAnsibleDir(config.ansible_dir);
       setInventoryDir(config.inventory_dir);
       setPlaybookDir(config.playbook_dir);
+      setGitEnabled(config.git_enabled);
+      setGitPullBeforeRun(config.git_pull_before_run);
     }
   }, [config]);
 
   const handleSave = () => {
-    onSave({ ansible_dir: ansibleDir, inventory_dir: inventoryDir, playbook_dir: playbookDir });
+    onSave({
+      ansible_dir: ansibleDir,
+      inventory_dir: inventoryDir,
+      playbook_dir: playbookDir,
+      git_enabled: gitEnabled,
+      git_pull_before_run: gitPullBeforeRun,
+    });
   };
 
   return (
@@ -150,6 +168,10 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
             className={`settings-tab${activeTab === "general" ? " settings-tab--active" : ""}`}
             onClick={() => setActiveTab("general")}
           >General</button>
+          <button
+            className={`settings-tab${activeTab === "git" ? " settings-tab--active" : ""}`}
+            onClick={() => setActiveTab("git")}
+          >Git</button>
           <button
             className={`settings-tab${activeTab === "appearance" ? " settings-tab--active" : ""}`}
             onClick={() => setActiveTab("appearance")}
@@ -196,6 +218,39 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
             </div>
           </>
         )}
+        {activeTab === "git" && (
+          <>
+            <div className="settings-content">
+              <div className="toggle-row">
+                <div className="toggle-info">
+                  <span className="toggle-label">Enable Git integration</span>
+                  <span className="toggle-desc">Allows Ursula to run Git commands in the Ansible directory</span>
+                </div>
+                <label className="toggle">
+                  <input type="checkbox" checked={gitEnabled} onChange={(e) => {
+                    setGitEnabled(e.target.checked);
+                    if (!e.target.checked) setGitPullBeforeRun(false);
+                  }} />
+                  <span className="toggle-track" />
+                </label>
+              </div>
+              <div className="toggle-row">
+                <div className="toggle-info">
+                  <span className={`toggle-label${!gitEnabled ? " toggle-label--disabled" : ""}`}>Pull before run</span>
+                  <span className="toggle-desc">Run <code className="toggle-code">git pull</code> before every playbook execution</span>
+                </div>
+                <label className="toggle">
+                  <input type="checkbox" checked={gitPullBeforeRun} disabled={!gitEnabled} onChange={(e) => setGitPullBeforeRun(e.target.checked)} />
+                  <span className="toggle-track" />
+                </label>
+              </div>
+            </div>
+            <div className="settings-footer">
+              <button className="settings-cancel" onClick={onClose}>Cancel</button>
+              <button className="settings-save" onClick={handleSave}>Save</button>
+            </div>
+          </>
+        )}
         {activeTab === "appearance" && (
           <div className="settings-content">
             <span className="settings-section-label">Theme</span>
@@ -224,14 +279,17 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
           <div className="settings-content">
             <div className="about-section">
               <h2 className="about-title">Ursula</h2>
-              <p className="about-version">v0.2.3</p>
+              <p className="about-version">v0.2.4</p>
             </div>
             <div className="update-check-section">
-              <button className="settings-save" onClick={checkForUpdate}>Check for Updates</button>
-              {updateAvailable ? (
-                <p className="update-status update-available">Update {latestVersion} is available</p>
+              {isCheckingUpdate ? (
+                <button className="settings-save" disabled>Checking...</button>
+              ) : updateAvailable ? (
+                <button className="settings-save" onClick={() => open("https://github.com/GnomishGames/Ursula/releases")}>
+                  Update to v{latestVersion}
+                </button>
               ) : (
-                <p className="update-status">You're up to date</p>
+                <button className="settings-save" disabled style={{ opacity: 0.5, cursor: "default" }}>Up to date</button>
               )}
             </div>
           </div>
