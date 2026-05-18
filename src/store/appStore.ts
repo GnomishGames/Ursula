@@ -7,6 +7,8 @@ interface AppConfig {
   ansible_dir: string;
   inventory_dir: string;
   playbook_dir: string;
+  git_enabled: boolean;
+  git_pull_before_run: boolean;
 }
 
 export interface Theme {

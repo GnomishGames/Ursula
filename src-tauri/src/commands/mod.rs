@@ -28,6 +28,8 @@ pub struct AppConfig {
     pub ansible_dir: String,
     pub inventory_dir: String,
     pub playbook_dir: String,
+    pub git_enabled: bool,
+    pub git_pull_before_run: bool,
 }
 
 impl Default for AppConfig {
@@ -40,6 +42,8 @@ impl Default for AppConfig {
             ansible_dir: ansible_dir.to_string_lossy().to_string(),
             inventory_dir: ansible_dir.join("inventory").to_string_lossy().to_string(),
             playbook_dir: ansible_dir.join("playbook").to_string_lossy().to_string(),
+            git_enabled: false,
+            git_pull_before_run: false,
         }
     }
 }
@@ -56,6 +60,8 @@ fn get_config(app: &AppHandle) -> AppConfig {
                 ansible_dir,
                 inventory_dir,
                 playbook_dir,
+                git_enabled: store.get("git_enabled").and_then(|v| v.as_bool()).unwrap_or(false),
+                git_pull_before_run: store.get("git_pull_before_run").and_then(|v| v.as_bool()).unwrap_or(false),
             };
         }
     }
@@ -67,6 +73,8 @@ fn save_config(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
     store.set("ansible_dir", serde_json::Value::String(config.ansible_dir.clone()));
     store.set("inventory_dir", serde_json::Value::String(config.inventory_dir.clone()));
     store.set("playbook_dir", serde_json::Value::String(config.playbook_dir.clone()));
+    store.set("git_enabled", serde_json::Value::Bool(config.git_enabled));
+    store.set("git_pull_before_run", serde_json::Value::Bool(config.git_pull_before_run));
     store.save().map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -361,6 +369,54 @@ pub async fn run_playbook(app: AppHandle, inventory: String, playbook: String, l
     if let Some(mut child) = old_child {
         let _ = child.start_kill();
         let _ = child.wait().await;
+    }
+
+    if config.git_enabled && config.git_pull_before_run {
+        let _ = app.emit("ansible-output", OutputLine {
+            line: "── git pull ──────────────────────────────".to_string(),
+            stream: "stdout".to_string(),
+            parts: None,
+        });
+
+        let git_output = Command::new("git")
+            .arg("pull")
+            .current_dir(&ansible_dir)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .output()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        for line in String::from_utf8_lossy(&git_output.stdout).lines() {
+            let _ = app.emit("ansible-output", OutputLine {
+                line: line.to_string(),
+                stream: "stdout".to_string(),
+                parts: None,
+            });
+        }
+        for line in String::from_utf8_lossy(&git_output.stderr).lines() {
+            let _ = app.emit("ansible-output", OutputLine {
+                line: line.to_string(),
+                stream: "stderr".to_string(),
+                parts: None,
+            });
+        }
+
+        if !git_output.status.success() {
+            let _ = app.emit("ansible-output", OutputLine {
+                line: "git pull failed — aborting playbook run.".to_string(),
+                stream: "error".to_string(),
+                parts: None,
+            });
+            let _ = app.emit("ansible-complete", false);
+            return Ok(());
+        }
+
+        let _ = app.emit("ansible-output", OutputLine {
+            line: String::new(),
+            stream: "stdout".to_string(),
+            parts: None,
+        });
     }
 
     let mut cmd = Command::new("ansible-playbook");
