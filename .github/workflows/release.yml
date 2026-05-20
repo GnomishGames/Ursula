@@ -57,12 +57,15 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'Ursula ${{ github.ref_name }}'
           releaseBody: |
-            ## What's new in v0.2.4
+            ## What's new in v0.3.0
 
             **New features:**
-            - Added Git integration settings tab — enable Git and optionally run `git pull` automatically before every playbook execution
-            - About tab now checks for updates automatically when opened
-            - Update button opens the releases page directly when an update is available
+            - Double-click any inventory or playbook file to open it in your editor (system default, or configure a custom editor in Settings → General)
+            - Full git commit/push workflow built in — when Git is enabled, a smart button in the toolbar shows your current repo state:
+              - **Commit** (yellow): uncommitted changes detected — click to stage all and commit with a message
+              - **Push (N)** (blue): N commits ahead of origin — click to push
+              - **Status** (muted): repo is clean — click to run `git status` in the terminal
+            - Git state auto-refreshes on app focus, after every git operation, and after saving settings
 
             ---
             Download the installer for your platform from the assets below.

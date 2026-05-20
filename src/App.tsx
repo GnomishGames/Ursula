@@ -315,7 +315,7 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
           <div className="settings-content">
             <div className="about-section">
               <h2 className="about-title">Ursula</h2>
-              <p className="about-version">v0.2.4</p>
+              <p className="about-version">v0.3.0</p>
             </div>
             <div className="update-check-section">
               {isCheckingUpdate ? (
