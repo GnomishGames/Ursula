@@ -314,6 +314,11 @@ html, body, #root {
   background: var(--accent);
   color: #fff;
 }
+.terminal-actions .execute-btn--status {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
 
 .terminal-toolbar {
   display: flex;

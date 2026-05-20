@@ -4,7 +4,7 @@ import { useAppStore, THEMES } from "./store/appStore";
 import "./styles.css";
 
 export default function App() {
-  const { loadData, inventories, playbooks, selectedInventory, selectedPlaybook, limit, status, output, filePreview, selectInventory, selectPlaybook, setLimit, execute, kill, closeFilePreview, openFile, gitPush, config, settingsOpen, loadSettings, toggleSettings, saveSettings, theme, setTheme, updateAvailable, latestVersion, dismissUpdate, checkForUpdate } = useAppStore();
+  const { loadData, inventories, playbooks, selectedInventory, selectedPlaybook, limit, status, output, filePreview, selectInventory, selectPlaybook, setLimit, execute, kill, closeFilePreview, openFile, gitAhead, checkGitAhead, showGitStatus, gitPush, config, settingsOpen, loadSettings, toggleSettings, saveSettings, theme, setTheme, updateAvailable, latestVersion, dismissUpdate, checkForUpdate } = useAppStore();
 
   const [leftWidth, setLeftWidth] = useState(200);
   const [rightWidth, setRightWidth] = useState(200);
@@ -45,6 +45,15 @@ export default function App() {
     loadSettings();
     checkForUpdate();
   }, []);
+
+  const handleWindowFocus = useCallback(() => {
+    if (config?.git_enabled) checkGitAhead();
+  }, [config?.git_enabled]);
+
+  useEffect(() => {
+    window.addEventListener("focus", handleWindowFocus);
+    return () => window.removeEventListener("focus", handleWindowFocus);
+  }, [handleWindowFocus]);
 
   const canExecute = !!(selectedInventory && selectedPlaybook && status !== "running");
 
@@ -99,11 +108,13 @@ export default function App() {
             filePreview={filePreview}
             canExecute={canExecute}
             gitEnabled={config?.git_enabled ?? false}
+            gitAhead={gitAhead}
             onLimitChange={setLimit}
             onExecute={execute}
             onKill={kill}
             onClosePreview={closeFilePreview}
             onGitPush={gitPush}
+            onGitStatus={showGitStatus}
           />
         </div>
       </div>
@@ -410,7 +421,7 @@ function SidebarPanel({ title, items, selectedItem, onSelect, onDoubleClick }: {
   );
 }
 
-function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, filePreview, canExecute, gitEnabled, onLimitChange, onExecute, onKill, onClosePreview, onGitPush }: {
+function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, filePreview, canExecute, gitEnabled, gitAhead, onLimitChange, onExecute, onKill, onClosePreview, onGitPush, onGitStatus }: {
   selectedInventory: any;
   selectedPlaybook: any;
   limit: string;
@@ -419,11 +430,13 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
   filePreview: { name: string; path: string; content: string } | null;
   canExecute: boolean;
   gitEnabled: boolean;
+  gitAhead: number;
   onLimitChange: (limit: string) => void;
   onExecute: () => void;
   onKill: () => void;
   onClosePreview: () => void;
   onGitPush: () => void;
+  onGitStatus: () => void;
 }) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
@@ -473,8 +486,10 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
     ? <button className="execute-btn" onClick={onKill} style={{ background: 'var(--red)' }}><StopIcon />Stop</button>
     : <button className="execute-btn" disabled={!canExecute} onClick={onExecute}><PlayIcon />Run</button>;
 
-  const pushBtn = gitEnabled && status !== "running"
-    ? <button className="execute-btn execute-btn--push" onClick={onGitPush}><PushIcon />Push</button>
+  const gitBtn = gitEnabled && status !== "running"
+    ? gitAhead > 0
+      ? <button className="execute-btn execute-btn--push" onClick={onGitPush}><PushIcon />Push ({gitAhead})</button>
+      : <button className="execute-btn execute-btn--status" onClick={onGitStatus}><GitStatusIcon />Status</button>
     : null;
 
   if (showPreview) {
@@ -490,7 +505,7 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
             {output.length > 0 && (
               <button className="preview-back-btn" onClick={onClosePreview}>← Output</button>
             )}
-            {pushBtn}
+            {gitBtn}
             {runOrStop}
           </div>
         </div>
@@ -518,7 +533,7 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
             </span>
           </div>
           <div className="terminal-actions">
-            {pushBtn}
+            {gitBtn}
             {runOrStop}
           </div>
         </div>
@@ -540,7 +555,7 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
           <span className="terminal-status-text">Ready</span>
         </div>
         <div className="terminal-actions">
-          {pushBtn}
+          {gitBtn}
           {runOrStop}
         </div>
       </div>
@@ -713,6 +728,16 @@ function PushIcon() {
       <line x1="12" y1="19" x2="12" y2="5" />
       <polyline points="5,12 12,5 19,12" />
       <line x1="5" y1="21" x2="19" y2="21" />
+    </svg>
+  );
+}
+
+function GitStatusIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="3" />
+      <line x1="12" y1="3" x2="12" y2="9" />
+      <line x1="12" y1="15" x2="12" y2="21" />
     </svg>
   );
 }

@@ -569,17 +569,89 @@ fn compare_versions(latest: &str, current: &str) -> i32 {
 pub async fn open_in_editor(app: AppHandle, path: String) -> Result<(), String> {
     let config = get_config(&app);
     if config.editor_cmd.is_empty() {
-        return Ok(());
+        // Use the OS default application (same handler as the file manager)
+        #[cfg(target_os = "linux")]
+        tokio::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        #[cfg(target_os = "macos")]
+        tokio::process::Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        #[cfg(target_os = "windows")]
+        tokio::process::Command::new("cmd")
+            .args(["/C", "start", "", &path])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    } else {
+        let parts: Vec<&str> = config.editor_cmd.split_whitespace().collect();
+        if parts.is_empty() {
+            return Ok(());
+        }
+        tokio::process::Command::new(parts[0])
+            .args(&parts[1..])
+            .arg(&path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
     }
-    let parts: Vec<&str> = config.editor_cmd.split_whitespace().collect();
-    if parts.is_empty() {
-        return Ok(());
-    }
-    tokio::process::Command::new(parts[0])
-        .args(&parts[1..])
-        .arg(&path)
-        .spawn()
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn check_git_ahead(app: AppHandle) -> Result<i32, String> {
+    let config = get_config(&app);
+    let ansible_dir = PathBuf::from(&config.ansible_dir);
+
+    let output = tokio::process::Command::new("git")
+        .args(["rev-list", "--count", "@{u}..HEAD"])
+        .current_dir(&ansible_dir)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .await
         .map_err(|e| e.to_string())?;
+
+    if !output.status.success() {
+        return Ok(-1); // no upstream configured
+    }
+
+    let count = String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .parse::<i32>()
+        .unwrap_or(-1);
+    Ok(count)
+}
+
+#[tauri::command]
+pub async fn git_show_status(app: AppHandle) -> Result<(), String> {
+    let config = get_config(&app);
+    let ansible_dir = PathBuf::from(&config.ansible_dir);
+
+    let _ = app.emit("ansible-output", OutputLine {
+        line: "── git status ──────────────────────────────".to_string(),
+        stream: "stdout".to_string(),
+        parts: None,
+    });
+
+    let output = tokio::process::Command::new("git")
+        .arg("status")
+        .current_dir(&ansible_dir)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let _ = app.emit("ansible-output", OutputLine {
+            line: line.to_string(),
+            stream: "stdout".to_string(),
+            parts: None,
+        });
+    }
+
     Ok(())
 }
 

@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-shell";
 import { Inventory, Playbook, ExecutionStatus, OutputLine } from "../types";
 
 interface AppConfig {
@@ -246,6 +245,9 @@ interface AppState {
   loadFilePreview: (path: string, name: string) => Promise<void>;
   closeFilePreview: () => void;
   openFile: (path: string) => Promise<void>;
+  gitAhead: number;
+  checkGitAhead: () => Promise<void>;
+  showGitStatus: () => Promise<void>;
   gitPush: () => Promise<void>;
   loadSettings: () => Promise<void>;
   saveSettings: (config: AppConfig) => Promise<void>;
@@ -269,6 +271,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   theme: localStorage.getItem("ursula-theme") || "midnight",
   updateAvailable: false,
   latestVersion: "",
+  gitAhead: -1,
 
   loadData: async () => {
     try {
@@ -350,11 +353,37 @@ export const useAppStore = create<AppState>((set, get) => ({
   closeFilePreview: () => set({ filePreview: null }),
 
   openFile: async (path) => {
+    await invoke("open_in_editor", { path });
+  },
+
+  checkGitAhead: async () => {
     const { config } = get();
-    if (config?.editor_cmd) {
-      await invoke("open_in_editor", { path });
-    } else {
-      await open(path);
+    if (!config?.git_enabled) return;
+    try {
+      const ahead = await invoke<number>("check_git_ahead");
+      set({ gitAhead: ahead });
+    } catch {
+      set({ gitAhead: -1 });
+    }
+  },
+
+  showGitStatus: async () => {
+    set({ filePreview: null, output: [], status: "running" });
+    let unlisten: (() => void) | undefined;
+    try {
+      unlisten = await listen<OutputLine>("ansible-output", (event) => {
+        set((state) => ({ output: [...state.output, event.payload] }));
+      });
+      await invoke("git_show_status");
+      set({ status: "success" });
+    } catch (err) {
+      set((state) => ({
+        output: [...state.output, { line: String(err), stream: "stderr" }],
+        status: "failed",
+      }));
+    } finally {
+      unlisten?.();
+      get().checkGitAhead();
     }
   },
 
@@ -374,6 +403,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }));
     } finally {
       unlisten?.();
+      get().checkGitAhead();
     }
   },
 
@@ -384,6 +414,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const saved = THEMES.find((t) => t.id === savedId) ?? THEMES[0];
       applyTheme(saved.vars);
       set({ config, theme: saved.id });
+      if (config.git_enabled) get().checkGitAhead();
     } catch {
       set({ config: null });
     }
@@ -394,6 +425,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       await invoke("save_settings", { config });
       set({ config, settingsOpen: false });
       await get().loadData();
+      if (config.git_enabled) get().checkGitAhead();
     } catch {}
   },
 
