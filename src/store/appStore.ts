@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-shell";
 import { Inventory, Playbook, ExecutionStatus, OutputLine } from "../types";
 
 interface AppConfig {
@@ -9,6 +10,7 @@ interface AppConfig {
   playbook_dir: string;
   git_enabled: boolean;
   git_pull_before_run: boolean;
+  editor_cmd: string;
 }
 
 export interface Theme {
@@ -243,6 +245,8 @@ interface AppState {
   clearOutput: () => void;
   loadFilePreview: (path: string, name: string) => Promise<void>;
   closeFilePreview: () => void;
+  openFile: (path: string) => Promise<void>;
+  gitPush: () => Promise<void>;
   loadSettings: () => Promise<void>;
   saveSettings: (config: AppConfig) => Promise<void>;
   toggleSettings: () => void;
@@ -344,6 +348,34 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   closeFilePreview: () => set({ filePreview: null }),
+
+  openFile: async (path) => {
+    const { config } = get();
+    if (config?.editor_cmd) {
+      await invoke("open_in_editor", { path });
+    } else {
+      await open(path);
+    }
+  },
+
+  gitPush: async () => {
+    set({ filePreview: null, output: [], status: "running" });
+    let unlisten: (() => void) | undefined;
+    try {
+      unlisten = await listen<OutputLine>("ansible-output", (event) => {
+        set((state) => ({ output: [...state.output, event.payload] }));
+      });
+      const success = await invoke<boolean>("git_push");
+      set({ status: success ? "success" : "failed" });
+    } catch (err) {
+      set((state) => ({
+        output: [...state.output, { line: String(err), stream: "stderr" }],
+        status: "failed",
+      }));
+    } finally {
+      unlisten?.();
+    }
+  },
 
   loadSettings: async () => {
     try {

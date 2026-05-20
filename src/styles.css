@@ -310,6 +310,10 @@ html, body, #root {
   background: var(--border-light);
   color: var(--text-secondary);
 }
+.terminal-actions .execute-btn--push {
+  background: var(--accent);
+  color: #fff;
+}
 
 .terminal-toolbar {
   display: flex;

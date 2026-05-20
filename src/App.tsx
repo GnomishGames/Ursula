@@ -4,7 +4,7 @@ import { useAppStore, THEMES } from "./store/appStore";
 import "./styles.css";
 
 export default function App() {
-  const { loadData, inventories, playbooks, selectedInventory, selectedPlaybook, limit, status, output, filePreview, selectInventory, selectPlaybook, setLimit, execute, kill, closeFilePreview, config, settingsOpen, loadSettings, toggleSettings, saveSettings, theme, setTheme, updateAvailable, latestVersion, dismissUpdate, checkForUpdate } = useAppStore();
+  const { loadData, inventories, playbooks, selectedInventory, selectedPlaybook, limit, status, output, filePreview, selectInventory, selectPlaybook, setLimit, execute, kill, closeFilePreview, openFile, gitPush, config, settingsOpen, loadSettings, toggleSettings, saveSettings, theme, setTheme, updateAvailable, latestVersion, dismissUpdate, checkForUpdate } = useAppStore();
 
   const [leftWidth, setLeftWidth] = useState(200);
   const [rightWidth, setRightWidth] = useState(200);
@@ -69,6 +69,7 @@ export default function App() {
             items={inventories}
             selectedItem={selectedInventory}
             onSelect={selectInventory}
+            onDoubleClick={(item) => openFile(item.path)}
           />
         </div>
         <div
@@ -81,6 +82,7 @@ export default function App() {
             items={playbooks}
             selectedItem={selectedPlaybook}
             onSelect={selectPlaybook}
+            onDoubleClick={(item) => openFile(item.path)}
           />
         </div>
         <div
@@ -96,10 +98,12 @@ export default function App() {
             output={output}
             filePreview={filePreview}
             canExecute={canExecute}
+            gitEnabled={config?.git_enabled ?? false}
             onLimitChange={setLimit}
             onExecute={execute}
             onKill={kill}
             onClosePreview={closeFilePreview}
+            onGitPush={gitPush}
           />
         </div>
       </div>
@@ -112,10 +116,10 @@ export default function App() {
 }
 
 function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAvailable, latestVersion, checkForUpdate }: {
-  config: { ansible_dir: string; inventory_dir: string; playbook_dir: string; git_enabled: boolean; git_pull_before_run: boolean } | null;
+  config: { ansible_dir: string; inventory_dir: string; playbook_dir: string; git_enabled: boolean; git_pull_before_run: boolean; editor_cmd: string } | null;
   theme: string;
   onThemeChange: (id: string) => void;
-  onSave: (config: { ansible_dir: string; inventory_dir: string; playbook_dir: string; git_enabled: boolean; git_pull_before_run: boolean }) => void;
+  onSave: (config: { ansible_dir: string; inventory_dir: string; playbook_dir: string; git_enabled: boolean; git_pull_before_run: boolean; editor_cmd: string }) => void;
   onClose: () => void;
   updateAvailable: boolean;
   latestVersion: string;
@@ -135,6 +139,7 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
   const [playbookDir, setPlaybookDir] = useState(config?.playbook_dir || "");
   const [gitEnabled, setGitEnabled] = useState(config?.git_enabled ?? false);
   const [gitPullBeforeRun, setGitPullBeforeRun] = useState(config?.git_pull_before_run ?? false);
+  const [editorCmd, setEditorCmd] = useState(config?.editor_cmd || "");
 
   useEffect(() => {
     if (config) {
@@ -143,6 +148,7 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
       setPlaybookDir(config.playbook_dir);
       setGitEnabled(config.git_enabled);
       setGitPullBeforeRun(config.git_pull_before_run);
+      setEditorCmd(config.editor_cmd);
     }
   }, [config]);
 
@@ -153,6 +159,7 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
       playbook_dir: playbookDir,
       git_enabled: gitEnabled,
       git_pull_before_run: gitPullBeforeRun,
+      editor_cmd: editorCmd,
     });
   };
 
@@ -209,6 +216,15 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
                   value={playbookDir}
                   onChange={(e) => setPlaybookDir(e.target.value)}
                   placeholder="/path/to/playbooks"
+                />
+              </div>
+              <div className="settings-field">
+                <label>Editor</label>
+                <input
+                  type="text"
+                  value={editorCmd}
+                  onChange={(e) => setEditorCmd(e.target.value)}
+                  placeholder="Leave blank for system default (e.g. code, vim, /usr/bin/gedit)"
                 />
               </div>
             </div>
@@ -299,11 +315,12 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
   );
 }
 
-function SidebarPanel({ title, items, selectedItem, onSelect }: {
+function SidebarPanel({ title, items, selectedItem, onSelect, onDoubleClick }: {
   title: string;
   items: any[];
   selectedItem: any;
   onSelect: (item: any) => void;
+  onDoubleClick: (item: any) => void;
 }) {
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -344,6 +361,9 @@ function SidebarPanel({ title, items, selectedItem, onSelect }: {
             } else {
               onSelect(item);
             }
+          }}
+          onDoubleClick={() => {
+            if (!item.is_folder) onDoubleClick(item);
           }}
         >
           {item.is_folder && (
@@ -390,7 +410,7 @@ function SidebarPanel({ title, items, selectedItem, onSelect }: {
   );
 }
 
-function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, filePreview, canExecute, onLimitChange, onExecute, onKill, onClosePreview }: {
+function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, filePreview, canExecute, gitEnabled, onLimitChange, onExecute, onKill, onClosePreview, onGitPush }: {
   selectedInventory: any;
   selectedPlaybook: any;
   limit: string;
@@ -398,10 +418,12 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
   output: any[];
   filePreview: { name: string; path: string; content: string } | null;
   canExecute: boolean;
+  gitEnabled: boolean;
   onLimitChange: (limit: string) => void;
   onExecute: () => void;
   onKill: () => void;
   onClosePreview: () => void;
+  onGitPush: () => void;
 }) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
@@ -451,6 +473,10 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
     ? <button className="execute-btn" onClick={onKill} style={{ background: 'var(--red)' }}><StopIcon />Stop</button>
     : <button className="execute-btn" disabled={!canExecute} onClick={onExecute}><PlayIcon />Run</button>;
 
+  const pushBtn = gitEnabled && status !== "running"
+    ? <button className="execute-btn execute-btn--push" onClick={onGitPush}><PushIcon />Push</button>
+    : null;
+
   if (showPreview) {
     return (
       <div className="terminal">
@@ -464,6 +490,7 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
             {output.length > 0 && (
               <button className="preview-back-btn" onClick={onClosePreview}>← Output</button>
             )}
+            {pushBtn}
             {runOrStop}
           </div>
         </div>
@@ -491,6 +518,7 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
             </span>
           </div>
           <div className="terminal-actions">
+            {pushBtn}
             {runOrStop}
           </div>
         </div>
@@ -512,6 +540,7 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
           <span className="terminal-status-text">Ready</span>
         </div>
         <div className="terminal-actions">
+          {pushBtn}
           {runOrStop}
         </div>
       </div>
@@ -678,6 +707,16 @@ function CheckIcon() {
   );
 }
 
+function PushIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="12" y1="19" x2="12" y2="5" />
+      <polyline points="5,12 12,5 19,12" />
+      <line x1="5" y1="21" x2="19" y2="21" />
+    </svg>
+  );
+}
+
 function UpdateNotification({ version, onUpdate, onDismiss }: {
   version: string;
   onUpdate: () => void;
@@ -695,7 +734,7 @@ function UpdateNotification({ version, onUpdate, onDismiss }: {
 }
 
 function StatusBar({ config, onSettingsClick }: {
-  config: { ansible_dir: string; inventory_dir: string; playbook_dir: string } | null;
+  config: { ansible_dir: string; inventory_dir: string; playbook_dir: string; git_enabled: boolean; git_pull_before_run: boolean; editor_cmd: string } | null;
   onSettingsClick: () => void;
 }) {
   const shorten = (path: string) => {

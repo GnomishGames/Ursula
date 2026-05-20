@@ -30,6 +30,7 @@ pub struct AppConfig {
     pub playbook_dir: String,
     pub git_enabled: bool,
     pub git_pull_before_run: bool,
+    pub editor_cmd: String,
 }
 
 impl Default for AppConfig {
@@ -44,6 +45,7 @@ impl Default for AppConfig {
             playbook_dir: ansible_dir.join("playbook").to_string_lossy().to_string(),
             git_enabled: false,
             git_pull_before_run: false,
+            editor_cmd: String::new(),
         }
     }
 }
@@ -62,6 +64,7 @@ fn get_config(app: &AppHandle) -> AppConfig {
                 playbook_dir,
                 git_enabled: store.get("git_enabled").and_then(|v| v.as_bool()).unwrap_or(false),
                 git_pull_before_run: store.get("git_pull_before_run").and_then(|v| v.as_bool()).unwrap_or(false),
+                editor_cmd: store.get("editor_cmd").and_then(|v| v.as_str().map(|s| s.to_string())).unwrap_or_default(),
             };
         }
     }
@@ -75,6 +78,7 @@ fn save_config(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
     store.set("playbook_dir", serde_json::Value::String(config.playbook_dir.clone()));
     store.set("git_enabled", serde_json::Value::Bool(config.git_enabled));
     store.set("git_pull_before_run", serde_json::Value::Bool(config.git_pull_before_run));
+    store.set("editor_cmd", serde_json::Value::String(config.editor_cmd.clone()));
     store.save().map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -559,4 +563,68 @@ fn compare_versions(latest: &str, current: &str) -> i32 {
         if l_part < c_part { return -1; }
     }
     0
+}
+
+#[tauri::command]
+pub async fn open_in_editor(app: AppHandle, path: String) -> Result<(), String> {
+    let config = get_config(&app);
+    if config.editor_cmd.is_empty() {
+        return Ok(());
+    }
+    let parts: Vec<&str> = config.editor_cmd.split_whitespace().collect();
+    if parts.is_empty() {
+        return Ok(());
+    }
+    tokio::process::Command::new(parts[0])
+        .args(&parts[1..])
+        .arg(&path)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn git_push(app: AppHandle) -> Result<bool, String> {
+    let config = get_config(&app);
+    let ansible_dir = PathBuf::from(&config.ansible_dir);
+
+    let _ = app.emit("ansible-output", OutputLine {
+        line: "── git push ──────────────────────────────".to_string(),
+        stream: "stdout".to_string(),
+        parts: None,
+    });
+
+    let output = tokio::process::Command::new("git")
+        .arg("push")
+        .current_dir(&ansible_dir)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // git push sends most output (remote progress, result) to stderr even on success
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let _ = app.emit("ansible-output", OutputLine {
+            line: line.to_string(),
+            stream: "stdout".to_string(),
+            parts: None,
+        });
+    }
+    for line in String::from_utf8_lossy(&output.stderr).lines() {
+        let _ = app.emit("ansible-output", OutputLine {
+            line: line.to_string(),
+            stream: "stdout".to_string(),
+            parts: None,
+        });
+    }
+
+    let success = output.status.success();
+    let _ = app.emit("ansible-output", OutputLine {
+        line: format!("\nProcess exited with code {}", output.status.code().unwrap_or(-1)),
+        stream: if success { "success" } else { "error" }.to_string(),
+        parts: None,
+    });
+
+    Ok(success)
 }
