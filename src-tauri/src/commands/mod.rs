@@ -599,12 +599,19 @@ pub async fn open_in_editor(app: AppHandle, path: String) -> Result<(), String> 
     Ok(())
 }
 
+#[derive(Debug, Serialize)]
+pub struct GitState {
+    pub ahead: i32,
+    pub dirty: bool,
+}
+
 #[tauri::command]
-pub async fn check_git_ahead(app: AppHandle) -> Result<i32, String> {
+pub async fn check_git_state(app: AppHandle) -> Result<GitState, String> {
     let config = get_config(&app);
     let ansible_dir = PathBuf::from(&config.ansible_dir);
 
-    let output = tokio::process::Command::new("git")
+    // Commits ahead of upstream (-1 = no upstream)
+    let ahead_output = tokio::process::Command::new("git")
         .args(["rev-list", "--count", "@{u}..HEAD"])
         .current_dir(&ansible_dir)
         .stdout(std::process::Stdio::piped())
@@ -613,15 +620,28 @@ pub async fn check_git_ahead(app: AppHandle) -> Result<i32, String> {
         .await
         .map_err(|e| e.to_string())?;
 
-    if !output.status.success() {
-        return Ok(-1); // no upstream configured
-    }
+    let ahead = if ahead_output.status.success() {
+        String::from_utf8_lossy(&ahead_output.stdout)
+            .trim()
+            .parse::<i32>()
+            .unwrap_or(-1)
+    } else {
+        -1
+    };
 
-    let count = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .parse::<i32>()
-        .unwrap_or(-1);
-    Ok(count)
+    // Uncommitted changes
+    let dirty_output = tokio::process::Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(&ansible_dir)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let dirty = !String::from_utf8_lossy(&dirty_output.stdout).trim().is_empty();
+
+    Ok(GitState { ahead, dirty })
 }
 
 #[tauri::command]
@@ -653,6 +673,77 @@ pub async fn git_show_status(app: AppHandle) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn git_commit(app: AppHandle, message: String) -> Result<bool, String> {
+    let config = get_config(&app);
+    let ansible_dir = PathBuf::from(&config.ansible_dir);
+
+    let _ = app.emit("ansible-output", OutputLine {
+        line: "── git add & commit ──────────────────────────────".to_string(),
+        stream: "stdout".to_string(),
+        parts: None,
+    });
+
+    // Stage all changes
+    let add_output = tokio::process::Command::new("git")
+        .args(["add", "-A"])
+        .current_dir(&ansible_dir)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !add_output.status.success() {
+        let err = String::from_utf8_lossy(&add_output.stderr).to_string();
+        let _ = app.emit("ansible-output", OutputLine {
+            line: err,
+            stream: "error".to_string(),
+            parts: None,
+        });
+        let _ = app.emit("ansible-output", OutputLine {
+            line: "\ngit add failed — aborting commit.".to_string(),
+            stream: "error".to_string(),
+            parts: None,
+        });
+        return Ok(false);
+    }
+
+    // Commit
+    let commit_output = tokio::process::Command::new("git")
+        .args(["commit", "-m", &message])
+        .current_dir(&ansible_dir)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    for line in String::from_utf8_lossy(&commit_output.stdout).lines() {
+        let _ = app.emit("ansible-output", OutputLine {
+            line: line.to_string(),
+            stream: "stdout".to_string(),
+            parts: None,
+        });
+    }
+    for line in String::from_utf8_lossy(&commit_output.stderr).lines() {
+        let _ = app.emit("ansible-output", OutputLine {
+            line: line.to_string(),
+            stream: "stdout".to_string(),
+            parts: None,
+        });
+    }
+
+    let success = commit_output.status.success();
+    let _ = app.emit("ansible-output", OutputLine {
+        line: format!("\nProcess exited with code {}", commit_output.status.code().unwrap_or(-1)),
+        stream: if success { "success" } else { "error" }.to_string(),
+        parts: None,
+    });
+
+    Ok(success)
 }
 
 #[tauri::command]

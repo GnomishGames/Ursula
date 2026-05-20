@@ -246,8 +246,10 @@ interface AppState {
   closeFilePreview: () => void;
   openFile: (path: string) => Promise<void>;
   gitAhead: number;
-  checkGitAhead: () => Promise<void>;
+  gitDirty: boolean;
+  checkGitState: () => Promise<void>;
   showGitStatus: () => Promise<void>;
+  gitCommit: (message: string) => Promise<void>;
   gitPush: () => Promise<void>;
   loadSettings: () => Promise<void>;
   saveSettings: (config: AppConfig) => Promise<void>;
@@ -272,6 +274,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateAvailable: false,
   latestVersion: "",
   gitAhead: -1,
+  gitDirty: false,
 
   loadData: async () => {
     try {
@@ -356,14 +359,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     await invoke("open_in_editor", { path });
   },
 
-  checkGitAhead: async () => {
+  checkGitState: async () => {
     const { config } = get();
     if (!config?.git_enabled) return;
     try {
-      const ahead = await invoke<number>("check_git_ahead");
-      set({ gitAhead: ahead });
+      const state = await invoke<{ ahead: number; dirty: boolean }>("check_git_state");
+      set({ gitAhead: state.ahead, gitDirty: state.dirty });
     } catch {
-      set({ gitAhead: -1 });
+      set({ gitAhead: -1, gitDirty: false });
     }
   },
 
@@ -383,7 +386,27 @@ export const useAppStore = create<AppState>((set, get) => ({
       }));
     } finally {
       unlisten?.();
-      get().checkGitAhead();
+      get().checkGitState();
+    }
+  },
+
+  gitCommit: async (message) => {
+    set({ filePreview: null, output: [], status: "running" });
+    let unlisten: (() => void) | undefined;
+    try {
+      unlisten = await listen<OutputLine>("ansible-output", (event) => {
+        set((state) => ({ output: [...state.output, event.payload] }));
+      });
+      const success = await invoke<boolean>("git_commit", { message });
+      set({ status: success ? "success" : "failed" });
+    } catch (err) {
+      set((state) => ({
+        output: [...state.output, { line: String(err), stream: "stderr" }],
+        status: "failed",
+      }));
+    } finally {
+      unlisten?.();
+      get().checkGitState();
     }
   },
 
@@ -403,7 +426,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }));
     } finally {
       unlisten?.();
-      get().checkGitAhead();
+      get().checkGitState();
     }
   },
 
@@ -414,7 +437,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const saved = THEMES.find((t) => t.id === savedId) ?? THEMES[0];
       applyTheme(saved.vars);
       set({ config, theme: saved.id });
-      if (config.git_enabled) get().checkGitAhead();
+      if (config.git_enabled) void get().checkGitState();
     } catch {
       set({ config: null });
     }
@@ -425,7 +448,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       await invoke("save_settings", { config });
       set({ config, settingsOpen: false });
       await get().loadData();
-      if (config.git_enabled) get().checkGitAhead();
+      if (config.git_enabled) void get().checkGitState();
     } catch {}
   },
 

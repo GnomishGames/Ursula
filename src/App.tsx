@@ -4,11 +4,12 @@ import { useAppStore, THEMES } from "./store/appStore";
 import "./styles.css";
 
 export default function App() {
-  const { loadData, inventories, playbooks, selectedInventory, selectedPlaybook, limit, status, output, filePreview, selectInventory, selectPlaybook, setLimit, execute, kill, closeFilePreview, openFile, gitAhead, checkGitAhead, showGitStatus, gitPush, config, settingsOpen, loadSettings, toggleSettings, saveSettings, theme, setTheme, updateAvailable, latestVersion, dismissUpdate, checkForUpdate } = useAppStore();
+  const { loadData, inventories, playbooks, selectedInventory, selectedPlaybook, limit, status, output, filePreview, selectInventory, selectPlaybook, setLimit, execute, kill, closeFilePreview, openFile, gitAhead, gitDirty, checkGitState, showGitStatus, gitCommit, gitPush, config, settingsOpen, loadSettings, toggleSettings, saveSettings, theme, setTheme, updateAvailable, latestVersion, dismissUpdate, checkForUpdate } = useAppStore();
 
   const [leftWidth, setLeftWidth] = useState(200);
   const [rightWidth, setRightWidth] = useState(200);
   const [isDragging, setIsDragging] = useState<string | null>(null);
+  const [commitOpen, setCommitOpen] = useState(false);
 
   const handleMouseDown = (edge: string) => (e: React.MouseEvent) => {
     e.preventDefault();
@@ -47,7 +48,7 @@ export default function App() {
   }, []);
 
   const handleWindowFocus = useCallback(() => {
-    if (config?.git_enabled) checkGitAhead();
+    if (config?.git_enabled) checkGitState();
   }, [config?.git_enabled]);
 
   useEffect(() => {
@@ -109,13 +110,21 @@ export default function App() {
             canExecute={canExecute}
             gitEnabled={config?.git_enabled ?? false}
             gitAhead={gitAhead}
+            gitDirty={gitDirty}
             onLimitChange={setLimit}
             onExecute={execute}
             onKill={kill}
             onClosePreview={closeFilePreview}
             onGitPush={gitPush}
             onGitStatus={showGitStatus}
+            onGitCommit={() => setCommitOpen(true)}
           />
+          {commitOpen && (
+            <CommitModal
+              onCommit={(msg) => { setCommitOpen(false); gitCommit(msg); }}
+              onClose={() => setCommitOpen(false)}
+            />
+          )}
         </div>
       </div>
       <StatusBar config={config} onSettingsClick={toggleSettings} />
@@ -421,7 +430,7 @@ function SidebarPanel({ title, items, selectedItem, onSelect, onDoubleClick }: {
   );
 }
 
-function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, filePreview, canExecute, gitEnabled, gitAhead, onLimitChange, onExecute, onKill, onClosePreview, onGitPush, onGitStatus }: {
+function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, filePreview, canExecute, gitEnabled, gitAhead, gitDirty, onLimitChange, onExecute, onKill, onClosePreview, onGitPush, onGitStatus, onGitCommit }: {
   selectedInventory: any;
   selectedPlaybook: any;
   limit: string;
@@ -431,12 +440,14 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
   canExecute: boolean;
   gitEnabled: boolean;
   gitAhead: number;
+  gitDirty: boolean;
   onLimitChange: (limit: string) => void;
   onExecute: () => void;
   onKill: () => void;
   onClosePreview: () => void;
   onGitPush: () => void;
   onGitStatus: () => void;
+  onGitCommit: () => void;
 }) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
@@ -487,9 +498,11 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
     : <button className="execute-btn" disabled={!canExecute} onClick={onExecute}><PlayIcon />Run</button>;
 
   const gitBtn = gitEnabled && status !== "running"
-    ? gitAhead > 0
-      ? <button className="execute-btn execute-btn--push" onClick={onGitPush}><PushIcon />Push ({gitAhead})</button>
-      : <button className="execute-btn execute-btn--status" onClick={onGitStatus}><GitStatusIcon />Status</button>
+    ? gitDirty
+      ? <button className="execute-btn execute-btn--commit" onClick={onGitCommit}><CommitIcon />Commit</button>
+      : gitAhead > 0
+        ? <button className="execute-btn execute-btn--push" onClick={onGitPush}><PushIcon />Push ({gitAhead})</button>
+        : <button className="execute-btn execute-btn--status" onClick={onGitStatus}><GitStatusIcon />Status</button>
     : null;
 
   if (showPreview) {
@@ -742,6 +755,16 @@ function GitStatusIcon() {
   );
 }
 
+function CommitIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="3" />
+      <line x1="3" y1="12" x2="9" y2="12" />
+      <line x1="15" y1="12" x2="21" y2="12" />
+    </svg>
+  );
+}
+
 function UpdateNotification({ version, onUpdate, onDismiss }: {
   version: string;
   onUpdate: () => void;
@@ -754,6 +777,49 @@ function UpdateNotification({ version, onUpdate, onDismiss }: {
         <button className="cancel-btn" onClick={onDismiss}>Cancel</button>
       </div>
       <p className="update-text">Update v{version} is available</p>
+    </div>
+  );
+}
+
+function CommitModal({ onCommit, onClose }: {
+  onCommit: (message: string) => void;
+  onClose: () => void;
+}) {
+  const [message, setMessage] = useState("");
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey && message.trim()) {
+      e.preventDefault();
+      onCommit(message.trim());
+    }
+    if (e.key === "Escape") onClose();
+  };
+
+  return (
+    <div className="settings-overlay" onClick={onClose}>
+      <div className="commit-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="settings-header">
+          <span className="settings-title">Commit changes</span>
+          <button className="settings-close" onClick={onClose}><CloseIcon /></button>
+        </div>
+        <div className="commit-modal-body">
+          <textarea
+            className="commit-message-input"
+            placeholder="Commit message"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            autoFocus
+            rows={3}
+          />
+        </div>
+        <div className="settings-footer">
+          <button className="settings-cancel" onClick={onClose}>Cancel</button>
+          <button className="settings-save" disabled={!message.trim()} onClick={() => onCommit(message.trim())}>
+            Commit
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
