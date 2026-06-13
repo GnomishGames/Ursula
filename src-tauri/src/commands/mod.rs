@@ -31,6 +31,7 @@ pub struct AppConfig {
     pub git_enabled: bool,
     pub git_pull_before_run: bool,
     pub editor_cmd: String,
+    pub ssh_password: String,
 }
 
 impl Default for AppConfig {
@@ -46,6 +47,7 @@ impl Default for AppConfig {
             git_enabled: false,
             git_pull_before_run: false,
             editor_cmd: String::new(),
+            ssh_password: String::new(),
         }
     }
 }
@@ -65,6 +67,7 @@ fn get_config(app: &AppHandle) -> AppConfig {
                 git_enabled: store.get("git_enabled").and_then(|v| v.as_bool()).unwrap_or(false),
                 git_pull_before_run: store.get("git_pull_before_run").and_then(|v| v.as_bool()).unwrap_or(false),
                 editor_cmd: store.get("editor_cmd").and_then(|v| v.as_str().map(|s| s.to_string())).unwrap_or_default(),
+                ssh_password: store.get("ssh_password").and_then(|v| v.as_str().map(|s| s.to_string())).unwrap_or_default(),
             };
         }
     }
@@ -79,6 +82,7 @@ fn save_config(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
     store.set("git_enabled", serde_json::Value::Bool(config.git_enabled));
     store.set("git_pull_before_run", serde_json::Value::Bool(config.git_pull_before_run));
     store.set("editor_cmd", serde_json::Value::String(config.editor_cmd.clone()));
+    store.set("ssh_password", serde_json::Value::String(config.ssh_password.clone()));
     store.save().map_err(|e| e.to_string())?;
     Ok(())
 }
