@@ -434,6 +434,10 @@ pub async fn run_playbook(app: AppHandle, inventory: String, playbook: String, l
             cmd.arg("--limit").arg(lim);
         }
     }
+    if !config.ssh_password.is_empty() {
+        cmd.arg("--extra-vars")
+           .arg(format!("ansible_ssh_pass={} ansible_become_pass={}", config.ssh_password, config.ssh_password));
+    }
     cmd.current_dir(&ansible_dir);
     cmd.env("ANSIBLE_FORCE_COLOR", "1");
     cmd.stdout(std::process::Stdio::piped());
