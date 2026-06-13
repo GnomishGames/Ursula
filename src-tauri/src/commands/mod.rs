@@ -516,6 +516,67 @@ pub async fn kill_playbook() -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+pub async fn ping_hosts(app: AppHandle, inventory: String) -> Result<(), String> {
+    let config = get_config(&app);
+    let ansible_dir = PathBuf::from(&config.ansible_dir);
+
+    let mut cmd = Command::new("ansible");
+    cmd.arg("all")
+       .arg("-i").arg(&inventory)
+       .arg("-m").arg("ping");
+
+    if !config.ssh_password.is_empty() {
+        cmd.arg("--extra-vars")
+           .arg(format!("ansible_ssh_pass={} ansible_become_pass={}", config.ssh_password, config.ssh_password));
+    }
+
+    cmd.current_dir(&ansible_dir);
+    cmd.env("ANSIBLE_FORCE_COLOR", "1");
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+
+    let mut stdout_reader = BufReader::new(stdout).lines();
+    let mut stderr_reader = BufReader::new(stderr).lines();
+
+    let app_stdout = app.clone();
+    let app_stderr = app.clone();
+
+    let stdout_handle = tokio::spawn(async move {
+        while let Ok(Some(line)) = stdout_reader.next_line().await {
+            let (stream, parts) = categorize_ansible_line(&line);
+            let _ = app_stdout.emit("ansible-output", OutputLine { line, stream, parts });
+        }
+    });
+
+    let stderr_handle = tokio::spawn(async move {
+        while let Ok(Some(line)) = stderr_reader.next_line().await {
+            let _ = app_stderr.emit("ansible-output", OutputLine {
+                line,
+                stream: "stderr".to_string(),
+                parts: None,
+            });
+        }
+    });
+
+    let _ = tokio::join!(stdout_handle, stderr_handle);
+
+    let status = child.wait().await.map_err(|e| e.to_string())?;
+
+    let _ = app.emit("ansible-output", OutputLine {
+        line: format!("\nProcess exited with code {}", status.code().unwrap_or(-1)),
+        stream: if status.success() { "success" } else { "error" }.to_string(),
+        parts: None,
+    });
+    let _ = app.emit("ansible-complete", status.success());
+
+    Ok(())
+}
+
 #[derive(Debug, Serialize)]
 pub struct UpdateInfo {
     pub update_available: bool,
