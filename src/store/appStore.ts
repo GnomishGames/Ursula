@@ -3,13 +3,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Inventory, Playbook, ExecutionStatus, OutputLine } from "../types";
 
-interface AppConfig {
+export interface AppConfig {
   ansible_dir: string;
   inventory_dir: string;
   playbook_dir: string;
   git_enabled: boolean;
   git_pull_before_run: boolean;
   editor_cmd: string;
+  ssh_password: string;
+  ssh_key_path: string;
 }
 
 export interface Theme {
@@ -241,6 +243,7 @@ interface AppState {
   setLimit: (limit: string) => void;
   execute: () => Promise<void>;
   kill: () => Promise<void>;
+  pingHosts: () => Promise<void>;
   clearOutput: () => void;
   loadFilePreview: (path: string, name: string) => Promise<void>;
   closeFilePreview: () => void;
@@ -342,6 +345,35 @@ export const useAppStore = create<AppState>((set, get) => ({
       await invoke("kill_playbook");
       set({ status: "failed", output: [...get().output, { line: "\nProcess killed", stream: "stderr" }] });
     } catch {}
+  },
+
+  pingHosts: async () => {
+    const { selectedInventory, clearOutput } = get();
+    if (!selectedInventory) return;
+
+    set({ filePreview: null });
+    clearOutput();
+    set({ status: "running" });
+
+    let unlisten: (() => void) | undefined;
+    let unlistenComplete: (() => void) | undefined;
+    try {
+      unlisten = await listen<OutputLine>("ansible-output", (event) => {
+        set((state) => ({ output: [...state.output, event.payload] }));
+      });
+      unlistenComplete = await listen<boolean>("ansible-complete", (event) => {
+        set({ status: event.payload ? "success" : "failed" });
+      });
+      await invoke("ping_hosts", { inventory: selectedInventory.path });
+    } catch (err) {
+      set({
+        output: [{ line: String(err), stream: "stderr" }],
+        status: "failed",
+      });
+    } finally {
+      unlisten?.();
+      unlistenComplete?.();
+    }
   },
 
   clearOutput: () => set({ output: [], status: "idle" }),

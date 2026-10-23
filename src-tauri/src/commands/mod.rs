@@ -32,6 +32,8 @@ pub struct AppConfig {
     pub git_pull_before_run: bool,
     pub editor_cmd: String,
     pub ssh_password: String,
+    #[serde(default)]
+    pub ssh_key_path: String,
 }
 
 impl Default for AppConfig {
@@ -48,6 +50,7 @@ impl Default for AppConfig {
             git_pull_before_run: false,
             editor_cmd: String::new(),
             ssh_password: String::new(),
+            ssh_key_path: String::new(),
         }
     }
 }
@@ -68,6 +71,7 @@ fn get_config(app: &AppHandle) -> AppConfig {
                 git_pull_before_run: store.get("git_pull_before_run").and_then(|v| v.as_bool()).unwrap_or(false),
                 editor_cmd: store.get("editor_cmd").and_then(|v| v.as_str().map(|s| s.to_string())).unwrap_or_default(),
                 ssh_password: store.get("ssh_password").and_then(|v| v.as_str().map(|s| s.to_string())).unwrap_or_default(),
+                ssh_key_path: store.get("ssh_key_path").and_then(|v| v.as_str().map(|s| s.to_string())).unwrap_or_default(),
             };
         }
     }
@@ -83,8 +87,29 @@ fn save_config(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
     store.set("git_pull_before_run", serde_json::Value::Bool(config.git_pull_before_run));
     store.set("editor_cmd", serde_json::Value::String(config.editor_cmd.clone()));
     store.set("ssh_password", serde_json::Value::String(config.ssh_password.clone()));
+    store.set("ssh_key_path", serde_json::Value::String(config.ssh_key_path.clone()));
     store.save().map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Credentials and key selection as a JSON `--extra-vars` payload. Extra-vars
+/// outrank inventory/group_vars, so the chosen key wins over any key set there.
+fn credential_extra_vars(config: &AppConfig) -> Option<String> {
+    let mut vars = serde_json::Map::new();
+    if !config.ssh_password.is_empty() {
+        vars.insert("ansible_ssh_pass".into(), config.ssh_password.clone().into());
+        vars.insert("ansible_become_pass".into(), config.ssh_password.clone().into());
+    }
+    if !config.ssh_key_path.is_empty() {
+        vars.insert("ansible_ssh_private_key_file".into(), config.ssh_key_path.clone().into());
+        // Without this, ssh offers every ssh-agent key first and can hit MaxAuthTries.
+        vars.insert("ansible_ssh_extra_args".into(), "-o IdentitiesOnly=yes".into());
+    }
+    if vars.is_empty() {
+        None
+    } else {
+        Some(serde_json::Value::Object(vars).to_string())
+    }
 }
 
 #[tauri::command]
@@ -434,9 +459,8 @@ pub async fn run_playbook(app: AppHandle, inventory: String, playbook: String, l
             cmd.arg("--limit").arg(lim);
         }
     }
-    if !config.ssh_password.is_empty() {
-        cmd.arg("--extra-vars")
-           .arg(format!("ansible_ssh_pass={} ansible_become_pass={}", config.ssh_password, config.ssh_password));
+    if let Some(extra_vars) = credential_extra_vars(&config) {
+        cmd.arg("--extra-vars").arg(extra_vars);
     }
     cmd.current_dir(&ansible_dir);
     cmd.env("ANSIBLE_FORCE_COLOR", "1");
@@ -526,9 +550,8 @@ pub async fn ping_hosts(app: AppHandle, inventory: String) -> Result<(), String>
        .arg("-i").arg(&inventory)
        .arg("-m").arg("ping");
 
-    if !config.ssh_password.is_empty() {
-        cmd.arg("--extra-vars")
-           .arg(format!("ansible_ssh_pass={} ansible_become_pass={}", config.ssh_password, config.ssh_password));
+    if let Some(extra_vars) = credential_extra_vars(&config) {
+        cmd.arg("--extra-vars").arg(extra_vars);
     }
 
     cmd.current_dir(&ansible_dir);
@@ -539,6 +562,8 @@ pub async fn ping_hosts(app: AppHandle, inventory: String) -> Result<(), String>
     let mut child = cmd.spawn().map_err(|e| e.to_string())?;
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
+
+    *RUNNING_CHILD.lock().await = Some(child);
 
     let mut stdout_reader = BufReader::new(stdout).lines();
     let mut stderr_reader = BufReader::new(stderr).lines();
@@ -565,7 +590,14 @@ pub async fn ping_hosts(app: AppHandle, inventory: String) -> Result<(), String>
 
     let _ = tokio::join!(stdout_handle, stderr_handle);
 
-    let status = child.wait().await.map_err(|e| e.to_string())?;
+    let child = { RUNNING_CHILD.lock().await.take() };
+    let status = match child {
+        Some(mut c) => c.wait().await.map_err(|e| e.to_string())?,
+        None => {
+            let _ = app.emit("ansible-complete", false);
+            return Ok(());
+        }
+    };
 
     let _ = app.emit("ansible-output", OutputLine {
         line: format!("\nProcess exited with code {}", status.code().unwrap_or(-1)),

@@ -1,10 +1,12 @@
 import { useEffect, useState, useRef, useCallback, memo } from "react";
 import { open } from "@tauri-apps/plugin-shell";
-import { useAppStore, THEMES } from "./store/appStore";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { homeDir, join } from "@tauri-apps/api/path";
+import { useAppStore, THEMES, AppConfig } from "./store/appStore";
 import "./styles.css";
 
 export default function App() {
-  const { loadData, inventories, playbooks, selectedInventory, selectedPlaybook, limit, status, output, filePreview, selectInventory, selectPlaybook, setLimit, execute, kill, closeFilePreview, openFile, gitAhead, gitDirty, checkGitState, showGitStatus, gitCommit, gitPush, config, settingsOpen, loadSettings, toggleSettings, saveSettings, theme, setTheme, updateAvailable, latestVersion, dismissUpdate, checkForUpdate } = useAppStore();
+  const { loadData, inventories, playbooks, selectedInventory, selectedPlaybook, limit, status, output, filePreview, selectInventory, selectPlaybook, setLimit, execute, kill, closeFilePreview, openFile, gitAhead, gitDirty, checkGitState, showGitStatus, gitCommit, gitPush, config, settingsOpen, loadSettings, toggleSettings, saveSettings, theme, setTheme, updateAvailable, latestVersion, dismissUpdate, checkForUpdate, pingHosts } = useAppStore();
 
   const [leftWidth, setLeftWidth] = useState(200);
   const [rightWidth, setRightWidth] = useState(200);
@@ -118,6 +120,7 @@ export default function App() {
             onGitPush={gitPush}
             onGitStatus={showGitStatus}
             onGitCommit={() => setCommitOpen(true)}
+            onPing={pingHosts}
           />
           {commitOpen && (
             <CommitModal
@@ -136,10 +139,10 @@ export default function App() {
 }
 
 function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAvailable, latestVersion, checkForUpdate }: {
-  config: { ansible_dir: string; inventory_dir: string; playbook_dir: string; git_enabled: boolean; git_pull_before_run: boolean; editor_cmd: string } | null;
+  config: AppConfig | null;
   theme: string;
   onThemeChange: (id: string) => void;
-  onSave: (config: { ansible_dir: string; inventory_dir: string; playbook_dir: string; git_enabled: boolean; git_pull_before_run: boolean; editor_cmd: string }) => void;
+  onSave: (config: AppConfig) => void;
   onClose: () => void;
   updateAvailable: boolean;
   latestVersion: string;
@@ -160,6 +163,17 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
   const [gitEnabled, setGitEnabled] = useState(config?.git_enabled ?? false);
   const [gitPullBeforeRun, setGitPullBeforeRun] = useState(config?.git_pull_before_run ?? false);
   const [editorCmd, setEditorCmd] = useState(config?.editor_cmd || "");
+  const [sshPassword, setSshPassword] = useState(config?.ssh_password || "");
+  const [showPassword, setShowPassword] = useState(false);
+  const [sshKeyPath, setSshKeyPath] = useState(config?.ssh_key_path || "");
+
+  const browseSshKey = async () => {
+    const picked = await openDialog({
+      title: "Select SSH private key",
+      defaultPath: sshKeyPath || await join(await homeDir(), ".ssh"),
+    });
+    if (typeof picked === "string") setSshKeyPath(picked);
+  };
 
   useEffect(() => {
     if (config) {
@@ -169,6 +183,8 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
       setGitEnabled(config.git_enabled);
       setGitPullBeforeRun(config.git_pull_before_run);
       setEditorCmd(config.editor_cmd);
+      setSshPassword(config.ssh_password);
+      setSshKeyPath(config.ssh_key_path);
     }
   }, [config]);
 
@@ -180,6 +196,8 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
       git_enabled: gitEnabled,
       git_pull_before_run: gitPullBeforeRun,
       editor_cmd: editorCmd,
+      ssh_password: sshPassword,
+      ssh_key_path: sshKeyPath,
     });
   };
 
@@ -246,6 +264,41 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
                   onChange={(e) => setEditorCmd(e.target.value)}
                   placeholder="Leave blank for system default (e.g. code, vim, /usr/bin/gedit)"
                 />
+              </div>
+              <div className="settings-field">
+                <label>SSH Private Key</label>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <input
+                    type="text"
+                    value={sshKeyPath}
+                    onChange={(e) => setSshKeyPath(e.target.value)}
+                    placeholder="Leave blank to let ssh choose"
+                    style={{ flex: 1 }}
+                  />
+                  <button type="button" className="settings-cancel" onClick={browseSshKey}>Browse</button>
+                </div>
+                <span className="settings-field-hint">Tried first, ahead of any key set in the inventory. Keys in ~/.ssh/config may still be tried after it.</span>
+              </div>
+              <div className="settings-field">
+                <label>SSH Password</label>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={sshPassword}
+                    onChange={(e) => setSshPassword(e.target.value)}
+                    placeholder="Leave blank to use SSH key auth"
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    className="copy-btn"
+                    onClick={() => setShowPassword((v) => !v)}
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                  </button>
+                </div>
+                <span className="settings-field-hint">Stored in plain text. Leave blank if using SSH key auth.</span>
               </div>
             </div>
             <div className="settings-footer">
@@ -430,7 +483,7 @@ function SidebarPanel({ title, items, selectedItem, onSelect, onDoubleClick }: {
   );
 }
 
-function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, filePreview, canExecute, gitEnabled, gitAhead, gitDirty, onLimitChange, onExecute, onKill, onClosePreview, onGitPush, onGitStatus, onGitCommit }: {
+function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, filePreview, canExecute, gitEnabled, gitAhead, gitDirty, onLimitChange, onExecute, onKill, onClosePreview, onGitPush, onGitStatus, onGitCommit, onPing }: {
   selectedInventory: any;
   selectedPlaybook: any;
   limit: string;
@@ -448,6 +501,7 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
   onGitPush: () => void;
   onGitStatus: () => void;
   onGitCommit: () => void;
+  onPing: () => void;
 }) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
@@ -505,6 +559,10 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
         : <button className="execute-btn execute-btn--status" onClick={onGitStatus}><GitStatusIcon />Status</button>
     : null;
 
+  const pingBtn = selectedInventory && status !== "running"
+    ? <button className="execute-btn execute-btn--ping" onClick={onPing}><PingIcon />Ping</button>
+    : null;
+
   if (showPreview) {
     return (
       <div className="terminal">
@@ -519,6 +577,7 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
               <button className="preview-back-btn" onClick={onClosePreview}>← Output</button>
             )}
             {gitBtn}
+            {pingBtn}
             {runOrStop}
           </div>
         </div>
@@ -547,6 +606,7 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
           </div>
           <div className="terminal-actions">
             {gitBtn}
+            {pingBtn}
             {runOrStop}
           </div>
         </div>
@@ -569,6 +629,7 @@ function Terminal({ selectedInventory, selectedPlaybook, limit, status, output, 
         </div>
         <div className="terminal-actions">
           {gitBtn}
+          {pingBtn}
           {runOrStop}
         </div>
       </div>
@@ -765,6 +826,36 @@ function CommitIcon() {
   );
 }
 
+function PingIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+      <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+      <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+      <circle cx="12" cy="20" r="1" fill="currentColor"/>
+    </svg>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+      <line x1="1" y1="1" x2="23" y2="23"/>
+    </svg>
+  );
+}
+
 function UpdateNotification({ version, onUpdate, onDismiss }: {
   version: string;
   onUpdate: () => void;
@@ -825,7 +916,7 @@ function CommitModal({ onCommit, onClose }: {
 }
 
 function StatusBar({ config, onSettingsClick }: {
-  config: { ansible_dir: string; inventory_dir: string; playbook_dir: string; git_enabled: boolean; git_pull_before_run: boolean; editor_cmd: string } | null;
+  config: AppConfig | null;
   onSettingsClick: () => void;
 }) {
   const shorten = (path: string) => {

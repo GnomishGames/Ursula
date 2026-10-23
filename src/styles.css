@@ -319,6 +319,15 @@ html, body, #root {
   color: var(--text-secondary);
   border: 1px solid var(--border);
 }
+.terminal-actions .execute-btn--ping {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.terminal-actions .execute-btn--ping:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
 .terminal-actions .execute-btn--commit {
   background: var(--yellow);
   color: #000;
@@ -663,6 +672,13 @@ html, body, #root {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
+}
+
+.settings-field-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 3px;
+  display: block;
 }
 
 .settings-field input {
