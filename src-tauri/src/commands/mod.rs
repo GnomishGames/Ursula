@@ -92,23 +92,22 @@ fn save_config(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
     Ok(())
 }
 
-/// Credentials and key selection as a JSON `--extra-vars` payload. Extra-vars
-/// outrank inventory/group_vars, so the chosen key wins over any key set there.
-fn credential_extra_vars(config: &AppConfig) -> Option<String> {
+/// Adds credentials and key selection to an ansible command. The key goes in as
+/// a CLI flag, so it is only a default: an inventory's own key still wins.
+fn add_credential_args(cmd: &mut Command, config: &AppConfig) {
     let mut vars = serde_json::Map::new();
     if !config.ssh_password.is_empty() {
         vars.insert("ansible_ssh_pass".into(), config.ssh_password.clone().into());
         vars.insert("ansible_become_pass".into(), config.ssh_password.clone().into());
     }
     if !config.ssh_key_path.is_empty() {
-        vars.insert("ansible_ssh_private_key_file".into(), config.ssh_key_path.clone().into());
+        cmd.arg("--private-key").arg(&config.ssh_key_path);
         // Without this, ssh offers every ssh-agent key first and can hit MaxAuthTries.
-        vars.insert("ansible_ssh_extra_args".into(), "-o IdentitiesOnly=yes".into());
+        // A CLI flag (not an extra-var) so an inventory's own ssh_extra_args still win.
+        cmd.arg("--ssh-extra-args").arg("-o IdentitiesOnly=yes");
     }
-    if vars.is_empty() {
-        None
-    } else {
-        Some(serde_json::Value::Object(vars).to_string())
+    if !vars.is_empty() {
+        cmd.arg("--extra-vars").arg(serde_json::Value::Object(vars).to_string());
     }
 }
 
@@ -459,9 +458,7 @@ pub async fn run_playbook(app: AppHandle, inventory: String, playbook: String, l
             cmd.arg("--limit").arg(lim);
         }
     }
-    if let Some(extra_vars) = credential_extra_vars(&config) {
-        cmd.arg("--extra-vars").arg(extra_vars);
-    }
+    add_credential_args(&mut cmd, &config);
     cmd.current_dir(&ansible_dir);
     cmd.env("ANSIBLE_FORCE_COLOR", "1");
     cmd.stdout(std::process::Stdio::piped());
@@ -541,18 +538,28 @@ pub async fn kill_playbook() -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn ping_hosts(app: AppHandle, inventory: String) -> Result<(), String> {
+pub async fn ping_hosts(app: AppHandle, inventory: String, limit: Option<String>) -> Result<(), String> {
     let config = get_config(&app);
     let ansible_dir = PathBuf::from(&config.ansible_dir);
+
+    // Same as run_playbook: kill any existing child rather than orphaning it.
+    let old_child = { RUNNING_CHILD.lock().await.take() };
+    if let Some(mut child) = old_child {
+        let _ = child.start_kill();
+        let _ = child.wait().await;
+    }
 
     let mut cmd = Command::new("ansible");
     cmd.arg("all")
        .arg("-i").arg(&inventory)
        .arg("-m").arg("ping");
-
-    if let Some(extra_vars) = credential_extra_vars(&config) {
-        cmd.arg("--extra-vars").arg(extra_vars);
+    if let Some(lim) = &limit {
+        if !lim.is_empty() {
+            cmd.arg("--limit").arg(lim);
+        }
     }
+
+    add_credential_args(&mut cmd, &config);
 
     cmd.current_dir(&ansible_dir);
     cmd.env("ANSIBLE_FORCE_COLOR", "1");

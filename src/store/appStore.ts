@@ -348,7 +348,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   pingHosts: async () => {
-    const { selectedInventory, clearOutput } = get();
+    const { selectedInventory, limit, clearOutput } = get();
     if (!selectedInventory) return;
 
     set({ filePreview: null });
@@ -364,7 +364,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       unlistenComplete = await listen<boolean>("ansible-complete", (event) => {
         set({ status: event.payload ? "success" : "failed" });
       });
-      await invoke("ping_hosts", { inventory: selectedInventory.path });
+      await invoke("ping_hosts", { inventory: selectedInventory.path, limit: limit || null });
     } catch (err) {
       set({
         output: [{ line: String(err), stream: "stderr" }],

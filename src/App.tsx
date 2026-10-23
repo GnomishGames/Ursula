@@ -168,11 +168,14 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
   const [sshKeyPath, setSshKeyPath] = useState(config?.ssh_key_path || "");
 
   const browseSshKey = async () => {
-    const picked = await openDialog({
-      title: "Select SSH private key",
-      defaultPath: sshKeyPath || await join(await homeDir(), ".ssh"),
-    });
-    if (typeof picked === "string") setSshKeyPath(picked);
+    try {
+      const picked = await openDialog({
+        title: "Select SSH private key",
+        defaultPath: sshKeyPath || await join(await homeDir(), ".ssh"),
+      });
+      // The .pub sits next to the private key and is easy to click by mistake.
+      if (typeof picked === "string") setSshKeyPath(picked.replace(/\.pub$/, ""));
+    } catch {}
   };
 
   useEffect(() => {
@@ -277,7 +280,7 @@ function SettingsPanel({ config, theme, onThemeChange, onSave, onClose, updateAv
                   />
                   <button type="button" className="settings-cancel" onClick={browseSshKey}>Browse</button>
                 </div>
-                <span className="settings-field-hint">Tried first, ahead of any key set in the inventory. Keys in ~/.ssh/config may still be tried after it.</span>
+                <span className="settings-field-hint">Used for hosts whose inventory doesn't set its own key.</span>
               </div>
               <div className="settings-field">
                 <label>SSH Password</label>
