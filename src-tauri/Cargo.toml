@@ -1,6 +1,6 @@
 [package]
 name = "ursula"
-version = "0.3.0"
+version = "0.4.0"
 description = "Ursula - Ansible Runner"
 authors = ["Ursula"]
 license = "MIT"
